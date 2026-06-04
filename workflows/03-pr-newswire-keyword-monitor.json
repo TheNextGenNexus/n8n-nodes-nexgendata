@@ -1,0 +1,127 @@
+{
+  "name": "NexGenData \u2014 PR Newswire Keyword Monitor (M&A alerts)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 4
+            }
+          ]
+        }
+      },
+      "id": "2830b840-8d7c-473f-9a9b-7a7357887c11",
+      "name": "Every 4 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/nexgendata~pr-newswire-press-releases-scraper/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"maxItems\": 50}",
+        "options": {}
+      },
+      "id": "2f8e6027-b28e-4891-acc2-ab270bf9dd38",
+      "name": "PR Newswire Releases",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "version": 2
+          },
+          "combinator": "or",
+          "conditions": [
+            {
+              "id": "c3a3f23d-ec6b-4a3e-b333-7b6cb6fa21d1",
+              "leftValue": "={{ $json.title }}{{ $json.full_text }}",
+              "rightValue": "acquisition",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "4e8af1f8-fe96-40a5-8266-bcd63dc5a0d1",
+              "leftValue": "={{ $json.title }}{{ $json.full_text }}",
+              "rightValue": "merger",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ]
+        }
+      },
+      "id": "8f9fd9af-f999-4f61-95c0-a5bd71dfb452",
+      "name": "Match Keywords",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "Connect to Slack / Gmail / Google Sheets to receive alerts whenever a press release mentions your keywords (here: acquisition / merger). Edit the Match Keywords node for your terms."
+      },
+      "id": "8e6ced68-0661-4adc-bb77-4f37602e483c",
+      "name": "\u27a1 Connect output",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        940,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Every 4 Hours": {
+      "main": [
+        [
+          {
+            "node": "PR Newswire Releases",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PR Newswire Releases": {
+      "main": [
+        [
+          {
+            "node": "Match Keywords",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {},
+  "tags": []
+}

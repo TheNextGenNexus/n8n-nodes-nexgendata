@@ -1,0 +1,110 @@
+{
+  "name": "n8n-nodes-nexgendata",
+  "version": "0.1.0",
+  "description": "n8n community nodes for the NexGenData Apify actor fleet \u2014 email discovery, validation, company enrichment, and more.",
+  "keywords": [
+    "n8n-community-node-package",
+    "n8n",
+    "apify",
+    "nexgendata",
+    "email-finder",
+    "email-validator",
+    "company-enrichment",
+    "lead-generation",
+    "scraping",
+    "page-speed",
+    "lighthouse",
+    "core-web-vitals",
+    "tech-stack",
+    "wappalyzer",
+    "google-maps",
+    "local-leads",
+    "linkedin",
+    "b2b",
+    "yelp",
+    "google-search",
+    "serp",
+    "redfin",
+    "real-estate"
+  ],
+  "license": "MIT",
+  "homepage": "https://github.com/TheNextGenNexus/n8n-nodes-nexgendata",
+  "author": {
+    "name": "NexGenData",
+    "email": "steve_corbeil@hotmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheNextGenNexus/n8n-nodes-nexgendata.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TheNextGenNexus/n8n-nodes-nexgendata/issues"
+  },
+  "engines": {
+    "node": ">=18.10"
+  },
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc && gulp build:icons",
+    "dev": "tsc --watch",
+    "format": "prettier src/nodes src/credentials --write",
+    "lint": "eslint src/nodes src/credentials package.json",
+    "lintfix": "eslint src/nodes src/credentials package.json --fix",
+    "prepublishOnly": "npm run build && npm run lint -s"
+  },
+  "files": [
+    "dist/credentials",
+    "dist/utils",
+    "dist/nodes/NexGenDataEmailFinder",
+    "dist/nodes/NexGenDataEmailValidator",
+    "dist/nodes/NexGenDataCompanyEnrichment",
+    "dist/nodes/NexGenDataPageSpeedAnalyzer",
+    "dist/nodes/NexGenDataTechStackDetector",
+    "dist/nodes/NexGenDataGoogleMapsLeadScraper",
+    "dist/nodes/NexGenDataLinkedInJobsScraper",
+    "dist/nodes/NexGenDataB2BLeadsFinder",
+    "dist/nodes/NexGenDataLeadListEnricher",
+    "dist/nodes/NexGenDataContactInfoScraper",
+    "dist/nodes/NexGenDataYelpBusinessScraper",
+    "dist/nodes/NexGenDataGoogleSearchScraper",
+    "dist/nodes/NexGenDataRedfinPropertyScraper",
+    "dist/nodes/NexGenDataWebsiteEmailExtractor",
+    "dist/nodes/NexGenDataEmailVerification"
+  ],
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": [
+      "dist/credentials/NexGenDataApi.credentials.js"
+    ],
+    "nodes": [
+      "dist/nodes/NexGenDataEmailFinder/NexGenDataEmailFinder.node.js",
+      "dist/nodes/NexGenDataEmailValidator/NexGenDataEmailValidator.node.js",
+      "dist/nodes/NexGenDataCompanyEnrichment/NexGenDataCompanyEnrichment.node.js",
+      "dist/nodes/NexGenDataPageSpeedAnalyzer/NexGenDataPageSpeedAnalyzer.node.js",
+      "dist/nodes/NexGenDataTechStackDetector/NexGenDataTechStackDetector.node.js",
+      "dist/nodes/NexGenDataGoogleMapsLeadScraper/NexGenDataGoogleMapsLeadScraper.node.js",
+      "dist/nodes/NexGenDataLinkedInJobsScraper/NexGenDataLinkedInJobsScraper.node.js",
+      "dist/nodes/NexGenDataB2BLeadsFinder/NexGenDataB2BLeadsFinder.node.js",
+      "dist/nodes/NexGenDataLeadListEnricher/NexGenDataLeadListEnricher.node.js",
+      "dist/nodes/NexGenDataContactInfoScraper/NexGenDataContactInfoScraper.node.js",
+      "dist/nodes/NexGenDataYelpBusinessScraper/NexGenDataYelpBusinessScraper.node.js",
+      "dist/nodes/NexGenDataGoogleSearchScraper/NexGenDataGoogleSearchScraper.node.js",
+      "dist/nodes/NexGenDataRedfinPropertyScraper/NexGenDataRedfinPropertyScraper.node.js",
+      "dist/nodes/NexGenDataWebsiteEmailExtractor/NexGenDataWebsiteEmailExtractor.node.js",
+      "dist/nodes/NexGenDataEmailVerification/NexGenDataEmailVerification.node.js"
+    ]
+  },
+  "devDependencies": {
+    "@types/node": "^18.16.16",
+    "@typescript-eslint/parser": "^7.15.0",
+    "eslint": "^8.56.0",
+    "eslint-plugin-n8n-nodes-base": "^1.16.3",
+    "gulp": "^4.0.2",
+    "n8n-workflow": "^1.82.0",
+    "prettier": "^3.3.2",
+    "typescript": "^5.5.3"
+  },
+  "peerDependencies": {
+    "n8n-workflow": "*"
+  }
+}

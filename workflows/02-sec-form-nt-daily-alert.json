@@ -1,0 +1,118 @@
+{
+  "name": "NexGenData \u2014 SEC Form NT Daily Late-Filing Alert",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "f3310aab-13c0-4aad-b721-6955d9fff77e",
+      "name": "Every Morning 9am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/nexgendata~sec-form-nt-late-filing-tracker/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"daysBack\": 1, \"maxResults\": 50}",
+        "options": {}
+      },
+      "id": "cf34c1de-6f9c-4efb-a092-3c9619411b61",
+      "name": "SEC Form NT Tracker",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "version": 2
+          },
+          "combinator": "and",
+          "conditions": [
+            {
+              "id": "1767bb2c-76e8-4a11-afaf-3954bf8f28a0",
+              "leftValue": "={{ $json.form_type }}",
+              "rightValue": "NT",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ]
+        }
+      },
+      "id": "b5b07d77-584f-4f98-bdbb-8dde35c3cdd1",
+      "name": "Only Late Filings",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "Connect this to your Gmail / Slack / Google Sheets node to receive the daily late-filing alerts. Each item is a company that just told the SEC it will file late \u2014 an early-warning signal."
+      },
+      "id": "2120ccfa-7875-4740-ade2-a0b7aa3bbcde",
+      "name": "\u27a1 Send to Email/Slack/Sheet",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        940,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Every Morning 9am": {
+      "main": [
+        [
+          {
+            "node": "SEC Form NT Tracker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "SEC Form NT Tracker": {
+      "main": [
+        [
+          {
+            "node": "Only Late Filings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {},
+  "tags": []
+}

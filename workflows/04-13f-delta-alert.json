@@ -1,0 +1,127 @@
+{
+  "name": "NexGenData \u2014 13F Holdings Delta Alert (smart-money moves)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "cd84e72a-29b7-48c9-93e0-01120a5219e2",
+      "name": "Daily 8am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/nexgendata~13f-holdings-delta-tracker/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"fund\": \"citadel\", \"maxRecords\": 50}",
+        "options": {}
+      },
+      "id": "3ed3b880-6d4e-4209-baed-0c5811dd592c",
+      "name": "13F Holdings Delta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "version": 2
+          },
+          "combinator": "or",
+          "conditions": [
+            {
+              "id": "7af68dce-4713-459e-b72d-9e78f9242351",
+              "leftValue": "={{ $json.change_type }}",
+              "rightValue": "new",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            },
+            {
+              "id": "d6404823-134c-4bae-b26f-ac51393d02cc",
+              "leftValue": "={{ $json.change_type }}",
+              "rightValue": "added",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ]
+        }
+      },
+      "id": "d0333df3-b20f-449e-9342-a97f9b2e5507",
+      "name": "New & Added Positions",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "Connect to Slack / Email / Google Sheets to get a daily list of new and increased positions for the fund you set (here: citadel). Change the 'fund' value in the 13F Holdings Delta node."
+      },
+      "id": "2c36aedb-2b34-42ab-85a8-e5881a29cf64",
+      "name": "\u27a1 Connect output",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        940,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Daily 8am": {
+      "main": [
+        [
+          {
+            "node": "13F Holdings Delta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "13F Holdings Delta": {
+      "main": [
+        [
+          {
+            "node": "New & Added Positions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {},
+  "tags": []
+}

@@ -1,0 +1,119 @@
+{
+  "name": "NexGenData \u2014 B2B Lead Pipeline (Find \u2192 Enrich \u2192 Verify)",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "5aa498fd-8644-437a-afd7-7d65ffcc5e2f",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/nexgendata~b2b-leads-finder/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"jobTitles\": [\"Head of Marketing\"], \"industry\": \"SaaS\", \"location\": \"United States\", \"maxResults\": 25}",
+        "options": {}
+      },
+      "id": "6421fe99-a7be-4473-8db8-cc66c77e55f8",
+      "name": "Find B2B Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/nexgendata~company-enrichment-tool/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"domains\": [\"={{ $json.company_domain }}\"]}",
+        "options": {}
+      },
+      "id": "36eb7627-b737-4cd1-b0a5-438847f2988a",
+      "name": "Enrich Company",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        720,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/nexgendata~email-verification-tool/run-sync-get-dataset-items",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"emails\": [\"={{ $json.email }}\"]}",
+        "options": {}
+      },
+      "id": "4572586c-fd2b-4d2d-9d93-5f2f2a28067d",
+      "name": "Verify Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        960,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Find B2B Leads",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find B2B Leads": {
+      "main": [
+        [
+          {
+            "node": "Enrich Company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enrich Company": {
+      "main": [
+        [
+          {
+            "node": "Verify Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {},
+  "meta": {
+    "templatecredsSetupCompleted": false
+  },
+  "tags": []
+}

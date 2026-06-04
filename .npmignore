@@ -1,0 +1,37 @@
+# Source
+src/
+tsconfig.json
+tsconfig.tsbuildinfo
+gulpfile.js
+.eslintrc.js
+.prettierrc.js
+.editorconfig
+
+# Tests
+**/*.spec.ts
+**/*.test.ts
+__tests__/
+coverage/
+
+# Tooling
+.vscode/
+.idea/
+.github/
+
+# Dev
+node_modules/
+*.log
+.DS_Store
+.env
+.env.*
+
+# Docs that don't ship to npm (README + LICENSE *do* ship by default)
+TESTING.md
+
+# Stale dev artefacts from the initial scaffolding pass — pre-rename file
+# names that this sandboxed filesystem couldn't delete. They are zero bytes
+# and not referenced from package.json, but exclude them anyway so the
+# published tarball is clean. A fresh checkout + build won't produce them.
+dist/nodes/CompanyEnrichment/
+dist/nodes/EmailFinder/
+dist/nodes/EmailValidator/
