@@ -1,7 +1,7 @@
 {
   "name": "n8n-nodes-nexgendata",
-  "version": "0.1.0",
-  "description": "n8n community nodes for the NexGenData Apify actor fleet \u2014 email discovery, validation, company enrichment, and more.",
+  "version": "0.1.1",
+  "description": "n8n community nodes for the NexGenData Apify actor fleet — email discovery, validation, company enrichment, and more.",
   "keywords": [
     "n8n-community-node-package",
     "n8n",
