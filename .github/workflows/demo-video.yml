@@ -158,35 +158,40 @@ jobs:
             log('NDV shows NexGenData:', await cnt(page.getByText(/NexGenData/i)));
           });
 
-          // ---- CREDENTIAL: select the one created via REST (or create new as fallback) ----
+          // ---- CREDENTIAL: visibly attach the "NexGenData API" credential in the NDV ----
           await phase('cred-select', async () => {
+            // diagnostics first: what does the credential area expose?
+            try { log('ndv comboboxes:', JSON.stringify((await page.locator('[role="combobox"], [data-test-id*="credential" i]').allInnerTexts()).slice(0, 10))); } catch {}
+            // open the credential dropdown (try the test-id, then the visible "Select Credential" control)
             const sel = page.locator('[data-test-id="node-credentials-select"], [data-test-id="credentials-select"], [data-test-id="credential-select"]').first()
-              .or(page.getByText(/select credential|nexgendata api/i).first());
-            if (await cnt(sel) > 0) { try { await sel.click(); log('opened cred dropdown'); } catch {} await sleep(1800); }
-            const opt = page.getByText(/NexGenData API/i).first();
+              .or(page.getByText(/select credential/i).first())
+              .or(page.locator('[class*="credential"] [role="combobox"], [class*="credentials"]').first());
+            if (await cnt(sel) > 0) { try { await sel.click({ force: true }); log('opened cred dropdown'); } catch {} await sleep(2000); }
+            // dump the dropdown options so we can see the exact item label
+            try { log('cred options:', JSON.stringify((await page.locator('[data-test-id="node-credentials-select-item"], [role="option"], li:visible').allInnerTexts()).filter(Boolean).slice(0, 12))); } catch {}
+            // click the existing credential
+            const opt = page.locator('[data-test-id="node-credentials-select-item"]').filter({ hasText: /NexGenData API/i }).first()
+              .or(page.getByRole('option', { name: /NexGenData API/i }).first())
+              .or(page.getByText(/^NexGenData API$/i).first());
             if (await cnt(opt) > 0) { try { await opt.click(); log('selected NexGenData API credential'); } catch {} }
-            else {
-              // fallback: create new credential inline and fill the token
-              const create = page.getByText(/create new credential|create new/i).first();
-              if (await cnt(create) > 0) { try { await create.click(); } catch {} await sleep(3000);
-                const pwd = page.locator('input[type="password"]:visible, [role="dialog"] input[type="text"]:visible').first();
-                if (await cnt(pwd) > 0) { try { await pwd.fill(TOKEN); log('token filled (fallback)'); } catch {} }
-                const save = page.locator('[data-test-id="credential-save-button"]').first().or(page.getByRole('button', { name: /^save$/i }).first());
-                if (await cnt(save) > 0) { try { await save.click(); } catch {} await sleep(7000); }
-                const back = page.getByRole('button', { name: /back to canvas|close|done/i }).first();
-                if (await cnt(back) > 0) { try { await back.click(); } catch {} }
-              }
-            }
+            else log('no NexGenData API option found');
             await sleep(2500);
-            log('credential connected text:', await cnt(page.getByText(/NexGenData API|tested successfully|connection successful/i)));
+            log('credential connected text:', await cnt(page.getByText(/NexGenData API/i)));
           });
 
-          // ---- RUN ----
+          // ---- RUN: give the node a sample input, then execute ----
+          await phase('fill-param', async () => {
+            // fill the first visible text parameter (e.g. domain/company) so execution has input
+            const p = page.locator('[data-test-id="parameter-input-field"] input:visible, .parameter-input input:visible, [class*="parameter"] input[type="text"]:visible').first();
+            if (await cnt(p) > 0) { try { await p.click(); await p.fill('stripe.com'); log('filled sample param'); } catch {} } else log('no param field');
+            await sleep(1500);
+          });
           await phase('run', async () => {
             const exec = page.locator('[data-test-id="node-execute-button"]').first().or(page.getByRole('button', { name: /test step|execute step|execute node/i }).first());
             if (await cnt(exec) > 0) { try { await exec.click(); log('executed'); } catch {} } else log('no execute button');
             await sleep(15000);
             log('output panel:', await cnt(page.locator('[data-test-id="ndv-output-panel"], [class*="output"]')));
+            log('output has data/error:', await cnt(page.getByText(/items|json|error|success|no data/i)));
           });
           await phase('output', async () => { await sleep(4000); });
 
