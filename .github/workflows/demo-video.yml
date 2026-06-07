@@ -127,41 +127,42 @@ jobs:
             await sleep(1500);
           });
 
-          // ---- BUILD A WORKFLOW: trigger first (n8n requires it), then the NexGenData action ----
-          await phase('new-workflow', async () => { await page.goto(BASE + '/workflow/new', { waitUntil: 'networkidle' }); await sleep(4000); });
-          await phase('add-trigger', async () => {
+          // ---- BUILD A WORKFLOW: add the NexGenData Email Finder ACTION (n8n auto-adds a trigger) ----
+          await phase('new-workflow', async () => { await page.goto(BASE + '/workflow/new', { waitUntil: 'networkidle' }); await sleep(4500); });
+          await phase('open-creator', async () => {
             const add = page.getByText(/add first step/i).first()
-              .or(page.locator('[data-test-id="canvas-add-button"], [data-test-id="node-creator-plus-button"]').first());
-            if (await cnt(add) > 0) { try { await add.click(); log('opened first-step creator'); } catch {} }
-            else { try { await page.mouse.click(683, 430); } catch {}; await sleep(600); await page.keyboard.press('Tab'); }
+              .or(page.locator('[data-test-id="canvas-add-button"], [data-test-id="canvas-plus-button"]').first());
+            if (await cnt(add) > 0) { try { await add.click(); log('clicked add first step'); } catch {} }
             await sleep(2500);
-            await page.keyboard.type('Manually', { delay: 55 });   // "Trigger manually"
-            await sleep(2500);
-            await page.keyboard.press('Enter');                    // add the manual trigger
+            // fill the panel search via the input element (keyboard.type drops leading chars before focus settles)
+            const search = page.locator('input[type="text"]:visible, [role="textbox"]:visible').first();
+            if (await cnt(search) > 0) { try { await search.click(); await sleep(500); await search.fill('NexGenData Email Finder'); log('search filled'); } catch {} }
             await sleep(3000);
-            await page.keyboard.press('Escape');                   // close trigger NDV, back to canvas
-            await sleep(1500);
-            log('canvas nodes after trigger:', await cnt(page.locator('[data-test-id="canvas-node"], [data-canvas-node-render-type], .canvas-node, [data-node-name]')));
+            log('results NexGenData:', await cnt(page.getByText(/NexGenData Email Finder/i)));
           });
-          await phase('add-action', async () => {
-            // Tab opens the node creator on the canvas; add the NexGenData action connected to the trigger
-            await page.keyboard.press('Tab');
+          await phase('pick-node', async () => {
+            const node = page.getByText(/NexGenData Email Finder/i).first();
+            if (await cnt(node) > 0) { try { await node.click(); log('clicked node'); } catch {} }
             await sleep(2500);
-            await page.keyboard.type('NexGenData Email Finder', { delay: 55 });
-            await sleep(3000);
-            log('NexGenData items:', await cnt(page.getByText(/NexGenData/i)));
-            await page.keyboard.press('Enter');
-            await sleep(3000);
-            if (await cnt(page.locator(NDV)) === 0) { await page.keyboard.press('Enter'); await sleep(3000); }
-            log('NDV open:', await cnt(page.locator(NDV)));
-            // confirm we are on a NexGenData node, not a trigger
-            log('NDV shows NexGenData:', await cnt(page.getByText(/NexGenData/i)));
+            // the node-details panel exposes the Action; click it to add the node to the canvas
+            const action = page.getByText(/Find emails for one or more company domains/i).first()
+              .or(page.getByText(/^Find emails/i).first());
+            if (await cnt(action) > 0) { try { await action.click(); log('clicked action'); } catch {} }
+            await sleep(4000);
+          });
+          await phase('open-node', async () => {
+            // n8n auto-adds a Schedule Trigger and may open ITS panel. Close it and open the Email Finder node.
+            await page.keyboard.press('Escape'); await sleep(1200);
+            const canvasNode = page.locator('[data-test-id="canvas-node"]').filter({ hasText: /NexGenData Email Finder/i }).first()
+              .or(page.getByText(/NexGenData Email Finder/i).first());
+            if (await cnt(canvasNode) > 0) { try { await canvasNode.dblclick(); log('opened Email Finder NDV'); } catch {} }
+            await sleep(3500);
+            log('NDV title is Email Finder:', await cnt(page.getByText(/NexGenData Email Finder/i)));
+            try { log('NDV param labels:', JSON.stringify((await page.locator('[class*="parameter"] label, .parameter-label, label:visible').allInnerTexts()).filter(Boolean).slice(0, 15))); } catch {}
           });
 
-          // ---- CREDENTIAL: visibly attach the "NexGenData API" credential in the NDV ----
+          // ---- CREDENTIAL: attach "NexGenData API" in the Email Finder NDV ----
           await phase('cred-select', async () => {
-            // the NDV has several dropdowns; the credential picker is one of them.
-            // open each in turn until "NexGenData API" appears, then select it.
             const combos = page.locator('[data-test-id="node-credentials-select"], [data-test-id="credentials-select"], [role="combobox"]');
             const total = await cnt(combos);
             log('combobox count:', total);
@@ -175,23 +176,32 @@ jobs:
               else { try { await page.keyboard.press('Escape'); } catch {} await sleep(700); }
             }
             if (!done) log('NexGenData API not found in any combobox');
-            await sleep(2500);
+            await sleep(2000);
             log('credential connected text:', await cnt(page.getByText(/NexGenData API/i)));
           });
 
-          // ---- RUN: give the node a sample input, then execute ----
-          await phase('fill-param', async () => {
-            // fill the first visible text parameter (e.g. domain/company) so execution has input
-            const p = page.locator('[data-test-id="parameter-input-field"] input:visible, .parameter-input input:visible, [class*="parameter"] input[type="text"]:visible').first();
-            if (await cnt(p) > 0) { try { await p.click(); await p.fill('stripe.com'); log('filled sample param'); } catch {} } else log('no param field');
-            await sleep(1500);
+          // ---- FILL the Email Finder's domain field (stripe.com), then execute ----
+          await phase('fill-domain', async () => {
+            let filled = false;
+            // prefer a text input whose surrounding label mentions "domain"
+            const byLabel = page.locator('div', { has: page.getByText(/domain/i) }).locator('input[type="text"]:visible').first();
+            if (await cnt(byLabel) > 0) { try { await byLabel.click(); await byLabel.fill('stripe.com'); log('filled domain (by label)'); filled = true; } catch {} }
+            if (!filled) {
+              const inputs = page.locator('[class*="parameter"] input[type="text"]:visible, [data-test-id="parameter-input-field"] input:visible');
+              const n2 = await cnt(inputs);
+              for (let i = 0; i < n2 && !filled; i++) {
+                try { const ph = await inputs.nth(i).getAttribute('placeholder'); await inputs.nth(i).click(); await inputs.nth(i).fill('stripe.com'); log('filled param ' + i + ' (ph=' + ph + ')'); filled = true; } catch {}
+              }
+            }
+            if (!filled) log('no domain field');
+            await sleep(1800);
           });
           await phase('run', async () => {
             const exec = page.locator('[data-test-id="node-execute-button"]').first().or(page.getByRole('button', { name: /test step|execute step|execute node/i }).first());
             if (await cnt(exec) > 0) { try { await exec.click(); log('executed'); } catch {} } else log('no execute button');
-            await sleep(15000);
+            await sleep(18000);
             log('output panel:', await cnt(page.locator('[data-test-id="ndv-output-panel"], [class*="output"]')));
-            log('output has data/error:', await cnt(page.getByText(/items|json|error|success|no data/i)));
+            log('output has data/error:', await cnt(page.getByText(/items|json|error|success|no data|email/i)));
           });
           await phase('output', async () => { await sleep(4000); });
 
