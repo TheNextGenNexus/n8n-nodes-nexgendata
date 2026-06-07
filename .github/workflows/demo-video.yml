@@ -114,63 +114,72 @@ jobs:
             log('nexgendata on settings page:', await cnt(page.getByText(/nexgendata/i)));
           });
 
-          // ---- BUILD A WORKFLOW with the node ----
-          await phase('new-workflow', async () => { await page.goto(BASE + '/workflow/new', { waitUntil: 'networkidle' }); await sleep(4000); });
-          await phase('open-panel', async () => {
-            const add = page.getByText(/add first step/i).first()
-              .or(page.locator('[data-test-id="canvas-add-button"], [data-test-id="node-creator-plus-button"]').first());
-            if (await cnt(add) > 0) { try { await add.click(); log('clicked add-first-step'); } catch {} }
-            else { try { await page.mouse.click(683, 430); } catch {}; await sleep(600); await page.keyboard.press('Tab'); }
-            await sleep(3000);
-            log('search inputs visible:', await cnt(page.locator('input:visible')));
-          });
           const NDV = '[data-test-id="ndv"], [data-test-id="node-details-view"], .ndv-wrapper, [class*="ndv"]';
-          await phase('search', async () => {
-            // node-creator search is auto-focused when the panel opens; type a concrete node name
-            await page.keyboard.type('NexGenData Email Finder', { delay: 55 });
-            await sleep(3500);
-            log('NexGenData items in panel:', await cnt(page.getByText(/NexGenData/i)));
-          });
-          await phase('add-node', async () => {
-            // add the highlighted top result via Enter (most reliable in the node creator)
-            await page.keyboard.press('Enter');
-            await sleep(3000);
-            // if an actions/operations sub-list opened instead of the NDV, add the first one
-            if (await cnt(page.locator(NDV)) === 0) { await page.keyboard.press('Enter'); await sleep(3000); }
-            // fallback: click a concrete node item by name
-            if (await cnt(page.locator(NDV)) === 0) {
-              const it = page.getByText(/NexGenData Email Finder/i).first().or(page.getByText(/Email Finder/i).first());
-              if (await cnt(it) > 0) { try { await it.click(); log('clicked node item'); } catch {} }
-              await sleep(3000);
-            }
-            log('NDV open:', await cnt(page.locator(NDV)));
-          });
 
-          // ---- CREDENTIAL ----
-          await phase('cred-open', async () => {
-            const drop = page.locator('[data-test-id="node-credentials-select"], [data-test-id="credentials-select"], [data-test-id="credential-select"]').first()
-              .or(page.getByText(/select credential|create new credential|nexgendata api/i).first());
-            if (await cnt(drop) > 0) { try { await drop.click(); log('clicked cred select'); } catch {} await sleep(1800); }
-            const create = page.getByText(/create new credential|create new/i).first();
-            if (await cnt(create) > 0) { try { await create.click(); log('clicked create new'); } catch {} }
-            await sleep(3500);
-            // diagnostics: expose what the NDV / credential modal actually contains
-            try { log('cred inputs:', JSON.stringify(await page.locator('input:visible').evaluateAll(els => els.map(e => e.getAttribute('placeholder') || e.getAttribute('name') || e.type).slice(0, 15)))); } catch {}
-            try { log('cred btns:', JSON.stringify((await page.locator('button:visible').allInnerTexts()).filter(Boolean).slice(0, 15))); } catch {}
-          });
-          await phase('cred-fill', async () => {
-            const pwd = page.locator('[role="dialog"] input[type="password"]:visible, .el-dialog input[type="password"]:visible, input[type="password"]:visible').first()
-              .or(page.locator('[role="dialog"] input[type="text"]:visible, .el-dialog input[type="text"]:visible').first());
-            if (await cnt(pwd) > 0) { try { await pwd.click(); } catch {} await pwd.fill(TOKEN); log('token filled'); } else log('no token field');
+          // ---- CREATE CREDENTIAL via REST (authenticated) so the node's dropdown has it ----
+          await phase('make-cred', async () => {
+            let s = 0, b = '';
+            try {
+              const r = await page.request.post(BASE + '/rest/credentials', { headers: { 'content-type': 'application/json' }, data: { name: 'NexGenData API', type: 'nexGenDataApi', data: { apifyToken: TOKEN } } });
+              s = r.status(); try { b = (await r.text()).slice(0, 200); } catch {}
+            } catch (e) { b = 'cred POST threw: ' + e.message.split('\n')[0]; }
+            log('create credential status:', s); log('create credential resp:', b);
             await sleep(1500);
           });
-          await phase('cred-save-test', async () => {
-            const save = page.locator('[data-test-id="credential-save-button"]').first().or(page.getByRole('button', { name: /^save$/i }).first());
-            if (await cnt(save) > 0) { try { await save.click(); } catch {} }
-            await sleep(9000);
-            log('tested-successfully text:', await cnt(page.getByText(/tested successfully|connection successful|credential.*saved/i)));
+
+          // ---- BUILD A WORKFLOW: trigger first (n8n requires it), then the NexGenData action ----
+          await phase('new-workflow', async () => { await page.goto(BASE + '/workflow/new', { waitUntil: 'networkidle' }); await sleep(4000); });
+          await phase('add-trigger', async () => {
+            const add = page.getByText(/add first step/i).first()
+              .or(page.locator('[data-test-id="canvas-add-button"], [data-test-id="node-creator-plus-button"]').first());
+            if (await cnt(add) > 0) { try { await add.click(); log('opened first-step creator'); } catch {} }
+            else { try { await page.mouse.click(683, 430); } catch {}; await sleep(600); await page.keyboard.press('Tab'); }
+            await sleep(2500);
+            await page.keyboard.type('Manually', { delay: 55 });   // "Trigger manually"
+            await sleep(2500);
+            await page.keyboard.press('Enter');                    // add the manual trigger
+            await sleep(3000);
+            await page.keyboard.press('Escape');                   // close trigger NDV, back to canvas
+            await sleep(1500);
+            log('canvas nodes after trigger:', await cnt(page.locator('[data-test-id="canvas-node"], [data-canvas-node-render-type], .canvas-node, [data-node-name]')));
           });
-          await phase('cred-close', async () => { const c = page.getByRole('button', { name: /back to canvas|close|done/i }).first(); if (await cnt(c) > 0) { try { await c.click(); } catch {} } await sleep(2500); });
+          await phase('add-action', async () => {
+            // Tab opens the node creator on the canvas; add the NexGenData action connected to the trigger
+            await page.keyboard.press('Tab');
+            await sleep(2500);
+            await page.keyboard.type('NexGenData Email Finder', { delay: 55 });
+            await sleep(3000);
+            log('NexGenData items:', await cnt(page.getByText(/NexGenData/i)));
+            await page.keyboard.press('Enter');
+            await sleep(3000);
+            if (await cnt(page.locator(NDV)) === 0) { await page.keyboard.press('Enter'); await sleep(3000); }
+            log('NDV open:', await cnt(page.locator(NDV)));
+            // confirm we are on a NexGenData node, not a trigger
+            log('NDV shows NexGenData:', await cnt(page.getByText(/NexGenData/i)));
+          });
+
+          // ---- CREDENTIAL: select the one created via REST (or create new as fallback) ----
+          await phase('cred-select', async () => {
+            const sel = page.locator('[data-test-id="node-credentials-select"], [data-test-id="credentials-select"], [data-test-id="credential-select"]').first()
+              .or(page.getByText(/select credential|nexgendata api/i).first());
+            if (await cnt(sel) > 0) { try { await sel.click(); log('opened cred dropdown'); } catch {} await sleep(1800); }
+            const opt = page.getByText(/NexGenData API/i).first();
+            if (await cnt(opt) > 0) { try { await opt.click(); log('selected NexGenData API credential'); } catch {} }
+            else {
+              // fallback: create new credential inline and fill the token
+              const create = page.getByText(/create new credential|create new/i).first();
+              if (await cnt(create) > 0) { try { await create.click(); } catch {} await sleep(3000);
+                const pwd = page.locator('input[type="password"]:visible, [role="dialog"] input[type="text"]:visible').first();
+                if (await cnt(pwd) > 0) { try { await pwd.fill(TOKEN); log('token filled (fallback)'); } catch {} }
+                const save = page.locator('[data-test-id="credential-save-button"]').first().or(page.getByRole('button', { name: /^save$/i }).first());
+                if (await cnt(save) > 0) { try { await save.click(); } catch {} await sleep(7000); }
+                const back = page.getByRole('button', { name: /back to canvas|close|done/i }).first();
+                if (await cnt(back) > 0) { try { await back.click(); } catch {} }
+              }
+            }
+            await sleep(2500);
+            log('credential connected text:', await cnt(page.getByText(/NexGenData API|tested successfully|connection successful/i)));
+          });
 
           // ---- RUN ----
           await phase('run', async () => {
