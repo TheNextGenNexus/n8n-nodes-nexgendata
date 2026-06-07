@@ -133,11 +133,14 @@ jobs:
             const add = page.getByText(/add first step/i).first()
               .or(page.locator('[data-test-id="canvas-add-button"], [data-test-id="canvas-plus-button"]').first());
             if (await cnt(add) > 0) { try { await add.click(); log('clicked add first step'); } catch {} }
-            await sleep(2500);
-            // fill the panel search via the input element (keyboard.type drops leading chars before focus settles)
-            const search = page.locator('input[type="text"]:visible, [role="textbox"]:visible').first();
-            if (await cnt(search) > 0) { try { await search.click(); await sleep(500); await search.fill('NexGenData Email Finder'); log('search filled'); } catch {} }
-            await sleep(3000);
+            await sleep(3500);  // let the trigger panel open and its search autofocus settle
+            // type into the autofocused panel search; retype if leading chars were dropped
+            await page.keyboard.type('NexGenData Email Finder', { delay: 80 });
+            await sleep(2000);
+            if (await cnt(page.getByText(/NexGenData Email Finder/i)) === 0) {
+              try { await page.keyboard.press('Control+A'); await page.keyboard.type('NexGenData Email Finder', { delay: 80 }); } catch {}
+              await sleep(2500);
+            }
             log('results NexGenData:', await cnt(page.getByText(/NexGenData Email Finder/i)));
           });
           await phase('pick-node', async () => {
