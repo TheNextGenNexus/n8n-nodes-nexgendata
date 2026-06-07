@@ -124,22 +124,26 @@ jobs:
             await sleep(3000);
             log('search inputs visible:', await cnt(page.locator('input:visible')));
           });
+          const NDV = '[data-test-id="ndv"], [data-test-id="node-details-view"], .ndv-wrapper, [class*="ndv"]';
           await phase('search', async () => {
-            const si = page.locator('input:visible').first();
-            try { await si.click(); } catch {}
-            await page.keyboard.type('NexGenData', { delay: 60 });
+            // node-creator search is auto-focused when the panel opens; type a concrete node name
+            await page.keyboard.type('NexGenData Email Finder', { delay: 55 });
             await sleep(3500);
             log('NexGenData items in panel:', await cnt(page.getByText(/NexGenData/i)));
           });
           await phase('add-node', async () => {
-            const item = page.getByText(/NexGenData/i).first();
-            if (await cnt(item) > 0) { try { await item.click(); log('clicked node'); } catch {} } else log('no NexGenData item to click');
+            // add the highlighted top result via Enter (most reliable in the node creator)
+            await page.keyboard.press('Enter');
             await sleep(3000);
-            // some nodes expand to an action list; click first action if present
-            const act = page.getByText(/email|enrich|verify|scrape|lead|search|audit|find/i).first();
-            if (await cnt(act) > 0) { try { await act.click(); } catch {} }
-            await sleep(4000);
-            log('NDV open:', await cnt(page.locator('[data-test-id="ndv"], .ndv-wrapper, [class*="ndv"]')));
+            // if an actions/operations sub-list opened instead of the NDV, add the first one
+            if (await cnt(page.locator(NDV)) === 0) { await page.keyboard.press('Enter'); await sleep(3000); }
+            // fallback: click a concrete node item by name
+            if (await cnt(page.locator(NDV)) === 0) {
+              const it = page.getByText(/NexGenData Email Finder/i).first().or(page.getByText(/Email Finder/i).first());
+              if (await cnt(it) > 0) { try { await it.click(); log('clicked node item'); } catch {} }
+              await sleep(3000);
+            }
+            log('NDV open:', await cnt(page.locator(NDV)));
           });
 
           // ---- CREDENTIAL ----
