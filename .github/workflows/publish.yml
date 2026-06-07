@@ -1,0 +1,47 @@
+name: Publish
+
+# Publishes this n8n community node to npm WITH an npm provenance statement,
+# required for n8n Creator Portal verification (since 2026-05-01). Provenance is
+# signed by GitHub OIDC and proves the package was built by this workflow from
+# this repo+commit.
+#
+# ONE-TIME npm setup (no token needed) — Trusted Publishers:
+#   npmjs.com -> the package -> Settings -> Publish access -> Trusted Publishers
+#   -> Add a publisher -> GitHub Actions:
+#       Repository owner: TheNextGenNexus
+#       Repository name:  n8n-nodes-nexgendata
+#       Workflow name:    publish.yml
+#   (Leave NPM_TOKEN unset; OIDC is used. To use a token instead, set the
+#    NPM_TOKEN repo secret.)
+#
+# RELEASE: bump "version" in package.json, then create a GitHub Release / tag
+# matching it (e.g. 0.1.1). That tag triggers this workflow.
+
+on:
+  push:
+    tags:
+      - '*.*.*'
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write   # OIDC token for npm provenance
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - name: Publish with provenance
+        run: |
+          [ -n "$NPM_TOKEN" ] && npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+          npm publish --provenance --access public
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
