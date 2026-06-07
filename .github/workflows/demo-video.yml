@@ -1,12 +1,12 @@
 name: Demo Video
 
 # Auto-generates the n8n verification demo video on a CI runner.
-# Boots real n8n -> installs the published node from npm -> creates the credential
-# (token from APIFY_TOKEN secret) and tests it -> runs a real action -> records the
-# whole continuous session (no cuts) via Playwright -> uploads demo.mp4 artifact.
+# Runs n8n from its OFFICIAL DOCKER IMAGE (avoids npm peer-dep hell), installs the
+# published node from npm via the n8n UI, creates the credential (token from the
+# APIFY_TOKEN secret) and tests it, runs a real action, and records the whole
+# continuous session (no cuts) with Playwright. Uploads demo.mp4 as an artifact.
 #
-# PREREQ: add repo secret APIFY_TOKEN (Settings -> Secrets and variables -> Actions).
-# RUN: Actions tab -> "Demo Video" -> Run workflow. Download the artifact when done.
+# PREREQ: repo secret APIFY_TOKEN. RUN: Actions -> Demo Video -> Run workflow.
 
 on:
   workflow_dispatch:
@@ -19,29 +19,31 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install n8n + Playwright
+      - name: Start n8n (official Docker image)
         run: |
-          npm install -g n8n@latest
+          docker run -d --name n8n -p 5678:5678 \
+            -e N8N_USER_MANAGEMENT_DISABLED=true \
+            -e N8N_COMMUNITY_PACKAGES_ENABLED=true \
+            -e N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true \
+            -e N8N_SECURE_COOKIE=false \
+            -e N8N_DIAGNOSTICS_ENABLED=false \
+            -e N8N_PERSONALIZATION_ENABLED=false \
+            -e N8N_HIRING_BANNER_ENABLED=false \
+            -e N8N_VERSION_NOTIFICATIONS_ENABLED=false \
+            -e GENERIC_TIMEZONE=UTC \
+            docker.n8n.io/n8nio/n8n:latest
+          echo "waiting for n8n health..."
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:5678/healthz >/dev/null; then echo "n8n up"; break; fi
+            sleep 3
+          done
+          curl -sf http://127.0.0.1:5678/healthz || (echo "n8n failed to start"; docker logs n8n; exit 1)
+
+      - name: Install Playwright
+        run: |
           npm init -y >/dev/null 2>&1
           npm install -D playwright@latest
           npx playwright install --with-deps chromium
-
-      - name: Start n8n (auth disabled, community packages on)
-        env:
-          N8N_USER_MANAGEMENT_DISABLED: 'true'
-          N8N_COMMUNITY_PACKAGES_ENABLED: 'true'
-          N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE: 'true'
-          N8N_SECURE_COOKIE: 'false'
-          N8N_DIAGNOSTICS_ENABLED: 'false'
-          N8N_PERSONALIZATION_ENABLED: 'false'
-          N8N_HIRING_BANNER_ENABLED: 'false'
-          N8N_VERSION_NOTIFICATIONS_ENABLED: 'false'
-          GENERIC_TIMEZONE: 'UTC'
-        run: |
-          nohup n8n start > n8n.log 2>&1 &
-          echo "waiting for n8n health..."
-          npx wait-on -t 240000 http://127.0.0.1:5678/healthz
-          echo "n8n up"; sleep 5
 
       - name: Write Playwright recorder
         run: |
@@ -184,7 +186,6 @@ jobs:
           await browser.close();
           log('done. video in ./video');
           JS
-          echo "record.mjs written"
 
       - name: Record demo
         env:
@@ -200,9 +201,9 @@ jobs:
           fi
           ls -la demo.* || true
 
-      - name: Tail n8n log
+      - name: n8n container logs
         if: always()
-        run: tail -50 n8n.log || true
+        run: docker logs n8n 2>&1 | tail -60 || true
 
       - name: Upload artifacts
         if: always()
@@ -214,5 +215,4 @@ jobs:
             demo.webm
             video/**
             shots/**
-            n8n.log
           if-no-files-found: warn
