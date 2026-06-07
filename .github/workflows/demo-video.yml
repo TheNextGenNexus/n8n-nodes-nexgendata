@@ -23,7 +23,7 @@ jobs:
         run: |
           set -e
           mkdir -p n8ndata/nodes
-          ( cd n8ndata/nodes && npm init -y >/dev/null 2>&1 && npm install n8n-nodes-nexgendata@0.1.2 )
+          ( cd n8ndata/nodes && npm init -y >/dev/null 2>&1 && npm install n8n-nodes-nexgendata@0.1.2 --omit=peer --no-audit --no-fund --ignore-scripts )
           echo "node package installed into volume:"; ls n8ndata/nodes/node_modules | grep nexgendata || true
           chmod -R 777 n8ndata
           docker run -d --name n8n -p 5678:5678 \
