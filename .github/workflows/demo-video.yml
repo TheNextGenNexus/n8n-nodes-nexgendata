@@ -154,14 +154,24 @@ jobs:
             await sleep(4000);
           });
           await phase('open-node', async () => {
-            // n8n auto-adds a Schedule Trigger and may open ITS panel. Close it and open the Email Finder node.
-            await page.keyboard.press('Escape'); await sleep(1200);
-            const canvasNode = page.locator('[data-test-id="canvas-node"]').filter({ hasText: /NexGenData Email Finder/i }).first()
-              .or(page.getByText(/NexGenData Email Finder/i).first());
-            if (await cnt(canvasNode) > 0) { try { await canvasNode.dblclick(); log('opened Email Finder NDV'); } catch {} }
-            await sleep(3500);
-            log('NDV title is Email Finder:', await cnt(page.getByText(/NexGenData Email Finder/i)));
-            try { log('NDV param labels:', JSON.stringify((await page.locator('[class*="parameter"] label, .parameter-label, label:visible').allInnerTexts()).filter(Boolean).slice(0, 15))); } catch {}
+            // n8n auto-adds a Schedule Trigger and opens ITS panel. Close it, then open the Email Finder node.
+            await page.keyboard.press('Escape'); await sleep(1500);
+            const nodes = page.locator('[data-test-id="canvas-node"], [data-canvas-node-render-type], .vue-flow__node, [data-node-name]');
+            const nc = await cnt(nodes);
+            log('canvas node count:', nc);
+            try { log('canvas node texts:', JSON.stringify((await nodes.allInnerTexts()).map(t => t.replace(/\s+/g,' ').trim()).slice(0, 8))); } catch {}
+            const ef = nodes.filter({ hasText: /NexGenData|Email Finder/i }).first();
+            if (await cnt(ef) > 0) {
+              try { await ef.dblclick(); log('dblclicked EF node'); } catch {}
+              await sleep(2500);
+              if (await cnt(page.locator('[data-test-id="ndv"], [class*="ndv"]')) === 0) { try { await ef.click(); await page.keyboard.press('Enter'); log('click+enter EF node'); } catch {} await sleep(2500); }
+            } else log('EF node not found on canvas');
+            await sleep(2500);
+            log('NDV open after:', await cnt(page.locator('[data-test-id="ndv"], [class*="ndv"]')));
+            // DEEP DIAGNOSTIC of whatever NDV is open - gives exact selectors for credential + domain field
+            try { log('NDV inputs:', JSON.stringify(await page.locator('input:visible').evaluateAll(els => els.map(e => ({ t: e.type, ph: e.getAttribute('placeholder'), name: e.getAttribute('name') })).slice(0, 20)))); } catch {}
+            try { log('NDV testids:', JSON.stringify(await page.locator('[data-test-id]:visible').evaluateAll(els => Array.from(new Set(els.map(e => e.getAttribute('data-test-id')))).slice(0, 45)))); } catch {}
+            try { log('NDV param labels:', JSON.stringify((await page.locator('.parameter-input-label, [class*="parameter"] label, [class*="paramLabel"], [class*="ParameterInput"] label').allInnerTexts()).filter(Boolean).slice(0, 20))); } catch {}
           });
 
           // ---- CREDENTIAL: attach "NexGenData API" in the Email Finder NDV ----
