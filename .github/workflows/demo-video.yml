@@ -68,39 +68,30 @@ jobs:
 
           await phase('open', async () => { await page.goto(BASE, { waitUntil: 'networkidle' }); await sleep(3000); });
 
-          // ---- INSTALL via the Settings > Community Nodes UI (authenticated session) ----
-          await phase('install-open', async () => {
+          // ---- INSTALL via n8n REST API using the browser's authenticated session ----
+          await phase('install', async () => {
             await page.goto(BASE + '/settings/community-nodes', { waitUntil: 'networkidle' });
-            await sleep(3500);
-            const btn = page.getByRole('button', { name: /install a community node|install community node|install/i }).first()
-              .or(page.getByText(/install a community node/i).first());
-            if (await cnt(btn) > 0) { await btn.click(); log('clicked install button'); } else log('no install button found');
             await sleep(3000);
-          });
-          await phase('install-fill', async () => {
-            const input = page.locator('input[placeholder*="npm" i], input[placeholder*="package" i]').first()
-              .or(page.locator('.el-dialog input[type="text"]:visible, [role="dialog"] input:visible').first());
-            if (await cnt(input) > 0) { await input.click(); await input.fill(PKG); log('package name filled'); } else log('no package input');
-            await sleep(1500);
-            // tick the "I understand the risks" acknowledgement checkbox
-            const box = page.locator('[role="dialog"] input[type="checkbox"], .el-dialog input[type="checkbox"]').first()
-              .or(page.getByText(/understand the risks|i acknowledge/i).first());
-            if (await cnt(box) > 0) { try { await box.click(); log('risk box checked'); } catch { try { await box.check(); } catch {} } }
-            await sleep(1200);
-          });
-          await phase('install-go', async () => {
-            const go = page.getByRole('button', { name: /^install$/i }).last()
-              .or(page.locator('[role="dialog"] button:has-text("Install"), .el-dialog button:has-text("Install")').last());
-            if (await cnt(go) > 0) { await go.click(); log('install confirmed'); } else log('no install-confirm button');
-            // npm install runs server-side; poll the settings list for the package up to ~150s
-            let seen = 0;
-            for (let i = 0; i < 30; i++) {
+            let status = 0, body = '';
+            try {
+              const resp = await page.request.post(BASE + '/rest/community-packages', { headers: { 'content-type': 'application/json' }, data: { name: PKG } });
+              status = resp.status();
+              try { body = (await resp.text()).slice(0, 400); } catch {}
+            } catch (e) { body = 'POST threw: ' + e.message.split('\n')[0]; }
+            log('install POST status:', status);
+            log('install resp:', body);
+            // npm install runs server-side; poll the REST list until the package registers (~120s)
+            let registered = false;
+            for (let i = 0; i < 24; i++) {
               await sleep(5000);
-              seen = await cnt(page.getByText(new RegExp(PKG, 'i')));
-              if (seen > 0) { log('package appeared after ~' + ((i+1)*5) + 's'); break; }
+              try { const g = await page.request.get(BASE + '/rest/community-packages'); const t = await g.text(); if (t.includes(PKG)) { registered = true; log('package registered after ~' + ((i+1)*5) + 's'); break; } } catch {}
             }
-            log('package rows on settings:', seen);
-            await sleep(2000);
+            log('package registered:', registered);
+            // if it never registered, dump what the settings page actually exposes so we can fix selectors
+            if (!registered) {
+              try { log('btns:', JSON.stringify((await page.locator('button').allInnerTexts()).slice(0, 25))); } catch {}
+              try { log('links:', JSON.stringify((await page.locator('a').allInnerTexts()).slice(0, 25))); } catch {}
+            }
           });
           await phase('community-nodes', async () => {
             await page.goto(BASE + '/settings/community-nodes', { waitUntil: 'networkidle' });
