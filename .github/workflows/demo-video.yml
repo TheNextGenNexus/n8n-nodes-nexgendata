@@ -1,12 +1,10 @@
 name: Demo Video
 
 # Auto-generates the n8n verification demo video on a CI runner.
-# Pre-installs the published node into n8n's data volume (loads at boot), runs n8n
-# from the official Docker image, then Playwright drives the UI: shows the node
-# installed, adds it to a workflow, creates+tests the credential (token from the
-# APIFY_TOKEN secret), runs a real action, and records one continuous video.
-#
-# PREREQ: repo secret APIFY_TOKEN. RUN: Actions -> Demo Video -> Run workflow.
+# Runs n8n (official Docker image), installs the published node via n8n's OWN REST
+# API (loads + registers it, handling the peer correctly), then Playwright drives
+# the UI: shows it installed, adds it to a workflow, creates+tests the credential
+# (token from APIFY_TOKEN secret), runs a real action, recording one continuous video.
 
 on:
   workflow_dispatch:
@@ -19,13 +17,11 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Pre-install node + start n8n (Docker)
+      - name: Start n8n + install node via API
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
         run: |
           set -e
-          mkdir -p n8ndata/nodes
-          ( cd n8ndata/nodes && npm init -y >/dev/null 2>&1 && npm install n8n-nodes-nexgendata@0.1.2 --omit=peer --no-audit --no-fund --ignore-scripts )
-          echo "node package installed into volume:"; ls n8ndata/nodes/node_modules | grep nexgendata || true
-          chmod -R 777 n8ndata
           docker run -d --name n8n -p 5678:5678 \
             -e N8N_USER_MANAGEMENT_DISABLED=true \
             -e N8N_COMMUNITY_PACKAGES_ENABLED=true \
@@ -37,15 +33,24 @@ jobs:
             -e N8N_VERSION_NOTIFICATIONS_ENABLED=false \
             -e N8N_ONBOARDING_FLOW_DISABLED=true \
             -e GENERIC_TIMEZONE=UTC \
-            -v "$PWD/n8ndata":/home/node/.n8n \
             docker.n8n.io/n8nio/n8n:latest
           echo "waiting for n8n health..."
           for i in $(seq 1 60); do
             if curl -sf http://127.0.0.1:5678/healthz >/dev/null; then echo "n8n up"; break; fi
             sleep 3
           done
-          curl -sf http://127.0.0.1:5678/healthz || (echo "FAILED"; docker logs n8n; exit 1)
-          sleep 8
+          curl -sf http://127.0.0.1:5678/healthz || (echo FAILED; docker logs n8n; exit 1)
+          sleep 5
+          echo "=== installing community node via n8n REST API ==="
+          curl -s -X POST http://127.0.0.1:5678/rest/community-packages \
+            -H "Content-Type: application/json" \
+            -d '{"name":"n8n-nodes-nexgendata"}' -w "\nHTTP_CODE=%{http_code}\n" || true
+          echo "=== waiting for package to load ==="
+          sleep 30
+          echo "=== installed community packages ==="
+          curl -s http://127.0.0.1:5678/rest/community-packages -w "\nHTTP_CODE=%{http_code}\n" || true
+          echo "=== docker logs tail ==="
+          docker logs n8n 2>&1 | tail -15 || true
 
       - name: Install Playwright
         run: |
@@ -65,63 +70,63 @@ jobs:
           const sleep = (ms) => new Promise(r => setTimeout(r, ms));
           let n = 0;
           const shot = async (p, name) => { try { await p.screenshot({ path: `shots/${String(++n).padStart(2,'0')}-${name}.png` }); } catch {} };
-
+          const cnt = async (loc) => { try { return await loc.count(); } catch { return -1; } };
           const browser = await chromium.launch({ args: ['--no-sandbox'] });
           const context = await browser.newContext({ viewport: { width: 1366, height: 820 }, recordVideo: { dir: 'video', size: { width: 1366, height: 820 } } });
           const page = await context.newPage();
-          page.setDefaultTimeout(30000);
+          page.setDefaultTimeout(25000);
           async function phase(label, fn) { log('PHASE', label); try { await fn(); } catch (e) { log('ERR', label, e.message.split('\n')[0]); } await shot(page, label.replace(/\s+/g,'-')); await sleep(2500); }
-          const cnt = async (loc) => { try { return await loc.count(); } catch { return -1; } };
 
-          // 1) show the node is installed (Settings > Community Nodes)
           await phase('open', async () => { await page.goto(BASE, { waitUntil: 'networkidle' }); await sleep(3000); });
-          await phase('community-nodes', async () => { await page.goto(BASE + '/settings/community-nodes', { waitUntil: 'networkidle' }); await sleep(3500); log('nexgendata text on settings:', await cnt(page.getByText(/nexgendata/i))); });
+          await phase('community-nodes', async () => { await page.goto(BASE + '/settings/community-nodes', { waitUntil: 'networkidle' }); await sleep(3500); log('nexgendata on settings page:', await cnt(page.getByText(/nexgendata/i))); });
 
-          // 2) new workflow + add the node
-          await phase('new-workflow', async () => { await page.goto(BASE + '/workflow/new', { waitUntil: 'networkidle' }); await sleep(3500); });
+          await phase('new-workflow', async () => { await page.goto(BASE + '/workflow/new', { waitUntil: 'networkidle' }); await sleep(4000); });
           await phase('open-panel', async () => {
-            const plus = page.locator('[data-test-id="canvas-add-button"]').first();
-            if (await cnt(plus) > 0) await plus.click();
-            else { const t = page.getByText(/add first step/i).first(); if (await cnt(t) > 0) await t.click(); else await page.keyboard.press('Tab'); }
+            // click empty canvas, then Tab opens the node creator (n8n shortcut)
+            try { await page.mouse.click(683, 430); } catch {}
+            await sleep(800);
+            await page.keyboard.press('Tab');
             await sleep(3000);
+            log('search inputs visible:', await cnt(page.locator('input:visible')));
           });
           await phase('search', async () => {
-            const s = page.locator('[data-test-id="node-creator-search-bar"] input, input[placeholder*="Search" i]').first();
-            await s.fill('NexGenData'); await sleep(3000);
-            log('search results with NexGenData:', await cnt(page.getByText(/NexGenData/i)));
+            // node creator search is auto-focused; type directly
+            await page.keyboard.type('NexGenData', { delay: 60 });
+            await sleep(3500);
+            log('NexGenData items in panel:', await cnt(page.getByText(/NexGenData/i)));
           });
           await phase('add-node', async () => {
-            const item = page.locator('[data-test-id="node-creator-item-name"]', { hasText: /NexGenData/i }).first()
-              .or(page.getByText(/NexGenData Email Verification|NexGenData Company Enrichment|NexGenData/i).first());
-            await item.click(); await sleep(3500);
-            log('NDV open:', await cnt(page.locator('[data-test-id="ndv"], .ndv-wrapper')));
+            const item = page.getByText(/NexGenData Email Verification|NexGenData Company Enrichment|NexGenData B2B|NexGenData/i).first();
+            if (await cnt(item) > 0) { await item.click(); log('clicked node'); } else log('no NexGenData item to click');
+            await sleep(4000);
+            log('NDV open:', await cnt(page.locator('[data-test-id="ndv"], .ndv-wrapper, [class*="ndv"]')));
           });
 
-          // 3) credential create + test
           await phase('cred-open', async () => {
-            const sel = page.locator('[data-test-id="credential-select"], [class*="credential"]').first()
+            const drop = page.locator('[data-test-id="credentials-select"], [data-test-id="credential-select"]').first()
               .or(page.getByText(/select credential|create new credential/i).first());
-            if (await cnt(sel) > 0) await sel.click(); await sleep(1500);
-            const create = page.getByText(/create new credential/i).first(); if (await cnt(create) > 0) await create.click(); await sleep(3000);
+            if (await cnt(drop) > 0) { await drop.click(); await sleep(1500); }
+            const create = page.getByText(/create new credential/i).first(); if (await cnt(create) > 0) await create.click();
+            await sleep(3000);
           });
           await phase('cred-fill', async () => {
-            const pwd = page.locator('input[type="password"]').first();
-            if (await cnt(pwd) > 0) { await pwd.fill(TOKEN); log('token filled'); } else log('no password field found');
+            const pwd = page.locator('input[type="password"]:visible').first();
+            if (await cnt(pwd) > 0) { await pwd.fill(TOKEN); log('token filled'); } else log('no token field');
             await sleep(1500);
           });
           await phase('cred-save-test', async () => {
-            const save = page.getByRole('button', { name: /^save$/i }).first().or(page.locator('[data-test-id="credential-save-button"]').first());
-            if (await cnt(save) > 0) await save.click(); await sleep(7000);
-            log('test success text:', await cnt(page.getByText(/connection tested successfully|tested successfully|connection successful/i)));
+            const save = page.locator('[data-test-id="credential-save-button"]').first().or(page.getByRole('button', { name: /^save$/i }).first());
+            if (await cnt(save) > 0) await save.click();
+            await sleep(8000);
+            log('tested-successfully text:', await cnt(page.getByText(/tested successfully|connection successful|credential.*saved/i)));
           });
-          await phase('cred-close', async () => { const c = page.getByRole('button', { name: /close|back to canvas|done/i }).first(); if (await cnt(c) > 0) { try { await c.click(); } catch {} } await sleep(2500); });
+          await phase('cred-close', async () => { const c = page.getByRole('button', { name: /back to canvas|close|done/i }).first(); if (await cnt(c) > 0) { try { await c.click(); } catch {} } await sleep(2500); });
 
-          // 4) run a real action
           await phase('run', async () => {
-            const exec = page.getByRole('button', { name: /test step|execute step|execute node/i }).first().or(page.locator('[data-test-id="node-execute-button"]').first());
+            const exec = page.locator('[data-test-id="node-execute-button"]').first().or(page.getByRole('button', { name: /test step|execute step|execute node/i }).first());
             if (await cnt(exec) > 0) { await exec.click(); log('executed'); } else log('no execute button');
-            await sleep(14000);
-            log('output items text:', await cnt(page.getByText(/items?\b/i)));
+            await sleep(15000);
+            log('output panel:', await cnt(page.locator('[data-test-id="ndv-output-panel"], [class*="output"]')));
           });
           await phase('output', async () => { await sleep(4000); });
 
