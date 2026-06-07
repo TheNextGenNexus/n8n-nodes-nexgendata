@@ -21,7 +21,6 @@ jobs:
         run: |
           set -e
           docker run -d --name n8n -p 5678:5678 \
-            -e N8N_USER_MANAGEMENT_DISABLED=true \
             -e N8N_COMMUNITY_PACKAGES_ENABLED=true \
             -e N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE=true \
             -e N8N_SECURE_COOKIE=false \
@@ -68,7 +67,23 @@ jobs:
 
           await phase('open', async () => { await page.goto(BASE, { waitUntil: 'networkidle' }); await sleep(3000); });
 
-          // ---- INSTALL via n8n REST API using the browser's authenticated session ----
+          // ---- OWNER SETUP: bootstrap a logged-in session (first-run endpoint is unauthenticated) ----
+          await phase('owner-setup', async () => {
+            const creds = { email: 'demo@nexgendata.test', firstName: 'Demo', lastName: 'User', password: 'NexGenDemo1' };
+            let s = 0, b = '';
+            for (const path of ['/rest/owner/setup', '/rest/owner']) {
+              try {
+                const r = await page.request.post(BASE + path, { headers: { 'content-type': 'application/json' }, data: creds });
+                s = r.status(); try { b = (await r.text()).slice(0, 200); } catch {}
+                log('owner setup', path, '->', s);
+                if (s >= 200 && s < 300) break;
+              } catch (e) { log('owner setup', path, 'threw', e.message.split('\n')[0]); }
+            }
+            log('owner setup final status:', s); log('owner setup resp:', b);
+            await sleep(2500);
+          });
+
+          // ---- INSTALL via n8n REST API (now authenticated) ----
           await phase('install', async () => {
             await page.goto(BASE + '/settings/community-nodes', { waitUntil: 'networkidle' });
             await sleep(3000);
