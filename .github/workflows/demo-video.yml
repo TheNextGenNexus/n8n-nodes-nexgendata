@@ -1,0 +1,218 @@
+name: Demo Video
+
+# Auto-generates the n8n verification demo video on a CI runner.
+# Boots real n8n -> installs the published node from npm -> creates the credential
+# (token from APIFY_TOKEN secret) and tests it -> runs a real action -> records the
+# whole continuous session (no cuts) via Playwright -> uploads demo.mp4 artifact.
+#
+# PREREQ: add repo secret APIFY_TOKEN (Settings -> Secrets and variables -> Actions).
+# RUN: Actions tab -> "Demo Video" -> Run workflow. Download the artifact when done.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install n8n + Playwright
+        run: |
+          npm install -g n8n@latest
+          npm init -y >/dev/null 2>&1
+          npm install -D playwright@latest
+          npx playwright install --with-deps chromium
+
+      - name: Start n8n (auth disabled, community packages on)
+        env:
+          N8N_USER_MANAGEMENT_DISABLED: 'true'
+          N8N_COMMUNITY_PACKAGES_ENABLED: 'true'
+          N8N_COMMUNITY_PACKAGES_ALLOW_TOOL_USAGE: 'true'
+          N8N_SECURE_COOKIE: 'false'
+          N8N_DIAGNOSTICS_ENABLED: 'false'
+          N8N_PERSONALIZATION_ENABLED: 'false'
+          N8N_HIRING_BANNER_ENABLED: 'false'
+          N8N_VERSION_NOTIFICATIONS_ENABLED: 'false'
+          GENERIC_TIMEZONE: 'UTC'
+        run: |
+          nohup n8n start > n8n.log 2>&1 &
+          echo "waiting for n8n health..."
+          npx wait-on -t 240000 http://127.0.0.1:5678/healthz
+          echo "n8n up"; sleep 5
+
+      - name: Write Playwright recorder
+        run: |
+          cat > record.mjs <<'JS'
+          import { chromium } from 'playwright';
+          import fs from 'fs';
+
+          const BASE = 'http://127.0.0.1:5678';
+          const PKG = 'n8n-nodes-nexgendata';
+          const TOKEN = process.env.APIFY_TOKEN || '';
+          fs.mkdirSync('shots', { recursive: true });
+          const log = (...a) => console.log('[rec]', ...a);
+          const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+          let n = 0;
+          const shot = async (page, name) => {
+            try { await page.screenshot({ path: `shots/${String(++n).padStart(2,'0')}-${name}.png`, fullPage: false }); } catch {}
+          };
+
+          const browser = await chromium.launch({ args: ['--no-sandbox'] });
+          const context = await browser.newContext({
+            viewport: { width: 1366, height: 820 },
+            recordVideo: { dir: 'video', size: { width: 1366, height: 820 } },
+          });
+          const page = await context.newPage();
+          page.setDefaultTimeout(45000);
+
+          async function phase(label, fn) {
+            log('PHASE', label);
+            try { await fn(); } catch (e) { log('phase error', label, e.message); }
+            await shot(page, label.replace(/\s+/g,'-'));
+            await sleep(2500);
+          }
+
+          // PHASE 1 - install community node from npm
+          await phase('open-n8n', async () => {
+            await page.goto(BASE + '/home/workflows', { waitUntil: 'networkidle' });
+            await sleep(3000);
+          });
+          await phase('settings-community', async () => {
+            await page.goto(BASE + '/settings/community-nodes', { waitUntil: 'networkidle' });
+            await sleep(2500);
+          });
+          await phase('install-dialog', async () => {
+            const btn = page.getByRole('button', { name: /install( a)? community node/i }).first();
+            if (await btn.count()) await btn.click();
+            else { const b2 = page.getByRole('button', { name: /install/i }).first(); if (await b2.count()) await b2.click(); }
+            await sleep(2000);
+          });
+          await phase('fill-package', async () => {
+            const input = page.getByPlaceholder(/n8n-nodes/i).first().or(page.locator('input[type="text"]').first());
+            await input.fill(PKG);
+            await sleep(1000);
+            // accept risk checkbox if present
+            const cb = page.getByRole('checkbox').first();
+            if (await cb.count()) { try { await cb.check(); } catch {} }
+            await sleep(1000);
+          });
+          await phase('do-install', async () => {
+            const install = page.getByRole('button', { name: /^install$/i }).last();
+            if (await install.count()) await install.click();
+            // community install runs npm; wait generously
+            await sleep(45000);
+            await page.goto(BASE + '/settings/community-nodes', { waitUntil: 'networkidle' });
+            await sleep(3000);
+          });
+
+          // PHASE 2 - new workflow + add node
+          await phase('new-workflow', async () => {
+            await page.goto(BASE + '/workflow/new', { waitUntil: 'networkidle' });
+            await sleep(3000);
+          });
+          await phase('open-node-panel', async () => {
+            const add = page.getByText(/add first step/i).first()
+              .or(page.locator('[data-test-id="canvas-add-button"]').first())
+              .or(page.locator('[data-test-id="node-creator-plus-button"]').first());
+            if (await add.count()) await add.click();
+            else await page.keyboard.press('Tab');
+            await sleep(2500);
+          });
+          await phase('search-node', async () => {
+            const search = page.getByPlaceholder(/search nodes/i).first().or(page.locator('input[type="text"]').first());
+            await search.fill('NexGenData');
+            await sleep(2500);
+          });
+          await phase('pick-node', async () => {
+            const item = page.getByText(/NexGenData/i).first();
+            await item.click();
+            await sleep(2500);
+            // some nodes open an action list; pick first action if shown
+            const act = page.getByText(/email|verify|enrich|find|scrape|search/i).first();
+            if (await act.count()) { try { await act.click(); } catch {} }
+            await sleep(2500);
+          });
+
+          // PHASE 3 - credential + test
+          await phase('open-credential', async () => {
+            const credSel = page.getByText(/select credential|create new credential|credential to connect/i).first();
+            if (await credSel.count()) await credSel.click();
+            await sleep(1500);
+            const createNew = page.getByText(/create new credential/i).first();
+            if (await createNew.count()) await createNew.click();
+            await sleep(2500);
+          });
+          await phase('fill-token', async () => {
+            // token field (password-type input in the credential modal)
+            const pwd = page.locator('input[type="password"]').first();
+            if (await pwd.count()) { await pwd.fill(TOKEN); }
+            else { const ti = page.locator('.el-dialog input[type="text"], [role="dialog"] input').first(); if (await ti.count()) await ti.fill(TOKEN); }
+            await sleep(1500);
+          });
+          await phase('save-test-credential', async () => {
+            const save = page.getByRole('button', { name: /save/i }).first();
+            if (await save.count()) await save.click();
+            // n8n auto-runs the credential test on save; wait for the green success
+            await sleep(6000);
+          });
+          await phase('credential-result', async () => {
+            // capture the "Connection tested successfully" state then close dialog
+            const close = page.getByRole('button', { name: /^close$|done/i }).first();
+            if (await close.count()) { try { await close.click(); } catch {} }
+            await sleep(2500);
+          });
+
+          // PHASE 4 - run a real action and show output
+          await phase('configure-and-run', async () => {
+            // fill the first visible parameter text field with a sample value
+            const param = page.locator('.parameter-input input[type="text"], [data-test-id="parameter-input"] input').first();
+            if (await param.count()) { try { await param.fill('apify.com'); } catch {} }
+            await sleep(1500);
+            const exec = page.getByRole('button', { name: /test step|execute (node|step)/i }).first();
+            if (await exec.count()) await exec.click();
+            await sleep(12000); // real Apify run
+          });
+          await phase('show-output', async () => {
+            await sleep(4000);
+          });
+
+          await sleep(2000);
+          await context.close();   // flush video
+          await browser.close();
+          log('done. video in ./video');
+          JS
+          echo "record.mjs written"
+
+      - name: Record demo
+        env:
+          APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
+        run: node record.mjs
+
+      - name: Convert to MP4
+        if: always()
+        run: |
+          ls -la video || true
+          if ls video/*.webm 1>/dev/null 2>&1; then
+            ffmpeg -y -i "$(ls video/*.webm | head -1)" -vf "fps=24,scale=1280:-2" -pix_fmt yuv420p demo.mp4 || cp "$(ls video/*.webm | head -1)" demo.webm
+          fi
+          ls -la demo.* || true
+
+      - name: Tail n8n log
+        if: always()
+        run: tail -50 n8n.log || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: n8n-demo-video
+          path: |
+            demo.mp4
+            demo.webm
+            video/**
+            shots/**
+            n8n.log
+          if-no-files-found: warn
