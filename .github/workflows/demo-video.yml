@@ -160,21 +160,21 @@ jobs:
 
           // ---- CREDENTIAL: visibly attach the "NexGenData API" credential in the NDV ----
           await phase('cred-select', async () => {
-            // diagnostics first: what does the credential area expose?
-            try { log('ndv comboboxes:', JSON.stringify((await page.locator('[role="combobox"], [data-test-id*="credential" i]').allInnerTexts()).slice(0, 10))); } catch {}
-            // open the credential dropdown (try the test-id, then the visible "Select Credential" control)
-            const sel = page.locator('[data-test-id="node-credentials-select"], [data-test-id="credentials-select"], [data-test-id="credential-select"]').first()
-              .or(page.getByText(/select credential/i).first())
-              .or(page.locator('[class*="credential"] [role="combobox"], [class*="credentials"]').first());
-            if (await cnt(sel) > 0) { try { await sel.click({ force: true }); log('opened cred dropdown'); } catch {} await sleep(2000); }
-            // dump the dropdown options so we can see the exact item label
-            try { log('cred options:', JSON.stringify((await page.locator('[data-test-id="node-credentials-select-item"], [role="option"], li:visible').allInnerTexts()).filter(Boolean).slice(0, 12))); } catch {}
-            // click the existing credential
-            const opt = page.locator('[data-test-id="node-credentials-select-item"]').filter({ hasText: /NexGenData API/i }).first()
-              .or(page.getByRole('option', { name: /NexGenData API/i }).first())
-              .or(page.getByText(/^NexGenData API$/i).first());
-            if (await cnt(opt) > 0) { try { await opt.click(); log('selected NexGenData API credential'); } catch {} }
-            else log('no NexGenData API option found');
+            // the NDV has several dropdowns; the credential picker is one of them.
+            // open each in turn until "NexGenData API" appears, then select it.
+            const combos = page.locator('[data-test-id="node-credentials-select"], [data-test-id="credentials-select"], [role="combobox"]');
+            const total = await cnt(combos);
+            log('combobox count:', total);
+            let done = false;
+            for (let i = 0; i < total && !done; i++) {
+              try { await combos.nth(i).click({ force: true }); } catch {}
+              await sleep(1500);
+              const opt = page.getByRole('option', { name: /NexGenData API/i }).first()
+                .or(page.getByText(/^NexGenData API$/i).first());
+              if (await cnt(opt) > 0) { try { await opt.click(); log('selected NexGenData API via combobox ' + i); done = true; } catch {} }
+              else { try { await page.keyboard.press('Escape'); } catch {} await sleep(700); }
+            }
+            if (!done) log('NexGenData API not found in any combobox');
             await sleep(2500);
             log('credential connected text:', await cnt(page.getByText(/NexGenData API/i)));
           });
