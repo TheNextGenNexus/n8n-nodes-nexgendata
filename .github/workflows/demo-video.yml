@@ -148,16 +148,20 @@ jobs:
 
           // ---- CREDENTIAL ----
           await phase('cred-open', async () => {
-            const drop = page.locator('[data-test-id="credentials-select"], [data-test-id="credential-select"]').first()
-              .or(page.getByText(/select credential|create new credential/i).first());
-            if (await cnt(drop) > 0) { try { await drop.click(); } catch {} await sleep(1500); }
-            const create = page.getByText(/create new credential/i).first(); if (await cnt(create) > 0) { try { await create.click(); } catch {} }
-            await sleep(3000);
+            const drop = page.locator('[data-test-id="node-credentials-select"], [data-test-id="credentials-select"], [data-test-id="credential-select"]').first()
+              .or(page.getByText(/select credential|create new credential|nexgendata api/i).first());
+            if (await cnt(drop) > 0) { try { await drop.click(); log('clicked cred select'); } catch {} await sleep(1800); }
+            const create = page.getByText(/create new credential|create new/i).first();
+            if (await cnt(create) > 0) { try { await create.click(); log('clicked create new'); } catch {} }
+            await sleep(3500);
+            // diagnostics: expose what the NDV / credential modal actually contains
+            try { log('cred inputs:', JSON.stringify(await page.locator('input:visible').evaluateAll(els => els.map(e => e.getAttribute('placeholder') || e.getAttribute('name') || e.type).slice(0, 15)))); } catch {}
+            try { log('cred btns:', JSON.stringify((await page.locator('button:visible').allInnerTexts()).filter(Boolean).slice(0, 15))); } catch {}
           });
           await phase('cred-fill', async () => {
-            const pwd = page.locator('input[type="password"]:visible').first()
-              .or(page.locator('[role="dialog"] input:visible, .el-dialog input:visible').first());
-            if (await cnt(pwd) > 0) { await pwd.fill(TOKEN); log('token filled'); } else log('no token field');
+            const pwd = page.locator('[role="dialog"] input[type="password"]:visible, .el-dialog input[type="password"]:visible, input[type="password"]:visible').first()
+              .or(page.locator('[role="dialog"] input[type="text"]:visible, .el-dialog input[type="text"]:visible').first());
+            if (await cnt(pwd) > 0) { try { await pwd.click(); } catch {} await pwd.fill(TOKEN); log('token filled'); } else log('no token field');
             await sleep(1500);
           });
           await phase('cred-save-test', async () => {
