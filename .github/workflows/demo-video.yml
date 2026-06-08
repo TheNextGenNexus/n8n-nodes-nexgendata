@@ -153,18 +153,28 @@ jobs:
             await sleep(2000);
           });
 
-          // ---- execute the node and show output (n8n requirement #4) ----
+          // ---- execute the node; a successful run proves BOTH the credential works and the functionality (n8n #3 + #4) ----
           await phase('run', async () => {
             if ((await cnt(page.locator(NDV))) === 0) { await openNodeFn(); }
             const exec = page.getByRole('button', { name: /^execute step$/i }).first()
               .or(page.locator('[data-test-id="node-execute-button"], [data-test-id="execute-node-button"]').first())
               .or(page.getByText(/^Execute step$/i).first());
-            if (await cnt(exec) > 0) { try { await exec.click(); log('clicked execute step'); } catch {} } else log('no execute button');
-            // the Apify Company Email Finder runs server-side; poll output up to ~120s
-            for (let i = 0; i < 24; i++) { await sleep(5000); const out = await cnt(page.getByText(/@|email|items|json|error|no data/i)); if (out > 0) { log('output after ~' + ((i + 1) * 5) + 's, hits=' + out); break; } }
-            log('output text hits:', await cnt(page.getByText(/@|email|items|json|error|no data/i)));
+            if (await cnt(exec) > 0) { try { await exec.click(); log('clicked execute step'); } catch {} }
+            else { const wf = page.getByRole('button', { name: /execute workflow/i }).first(); if (await cnt(wf) > 0) { try { await wf.click(); log('clicked execute workflow'); } catch {} } else log('no execute button'); }
+            // wait for the REAL Apify run. Break only on real output / success / error - NOT the "No output data" placeholder.
+            let got = false;
+            for (let i = 0; i < 30; i++) {
+              await sleep(5000);
+              const real = await cnt(page.getByText(/@|"email"|emails|companyDomain|"domain"|JSON|Table/i));
+              const done = await cnt(page.getByText(/execution.*success|node executed|successful|tested successfully/i));
+              const err = await cnt(page.getByText(/problem in node|error in|node failed|forbidden|unauthor|ERROR/i));
+              if (real > 0 || done > 0 || err > 0) { got = true; log('output state ~' + ((i + 1) * 5) + 's: real=' + real + ' done=' + done + ' err=' + err); break; }
+            }
+            if (!got) log('no real output after ~150s');
+            await sleep(3000);
+            log('final output hits:', await cnt(page.getByText(/@|email|json|items/i)));
           });
-          await phase('output', async () => { await sleep(5000); });
+          await phase('output', async () => { await sleep(6000); });
 
           await sleep(2000); await context.close(); await browser.close(); log('done');
           JS
