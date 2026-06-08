@@ -127,32 +127,41 @@ jobs:
             try { await page.keyboard.press('Escape'); } catch {}
             await sleep(1500);
           });
-          await phase('execute-rest', async () => {
-            let s = 0, body = '';
-            try { const r = await page.request.post(BASE + '/rest/workflows/' + wfId + '/run', { headers: { 'content-type': 'application/json' }, data: { workflowData: wf }, timeout: 180000 }); s = r.status(); body = (await r.text()); } catch (e) { body = 'run threw: ' + e.message.split('\n')[0]; }
-            log('run status:', s);
-            log('run resp head:', body.slice(0, 300));
-            try { const j = JSON.parse(body); execId = (j.data && (j.data.executionId || j.data.id)) || ''; } catch {}
-            // executions are now saved (env + workflow settings); poll the list until ours appears
-            for (let i = 0; i < 12 && !execId; i++) {
-              await sleep(4000);
-              try { const g = await page.request.get(BASE + '/rest/executions?filter=' + encodeURIComponent(JSON.stringify({ workflowId: wfId }))); const jj = JSON.parse(await g.text()); const arr = (jj.data && (jj.data.results || jj.data)) || []; execId = (arr[0] || {}).id || ''; } catch {}
+          // Execute the workflow IN THE EDITOR. The result is held in the editor's
+          // in-memory state, so opening the node renders its output panel directly —
+          // no dependency on the (empty) executions tab.
+          await phase('execute', async () => {
+            await page.goto(BASE + '/workflow/' + wfId, { waitUntil: 'networkidle' }); await sleep(4500);
+            try { await page.keyboard.press('Escape'); } catch {}
+            await sleep(800);
+            let clicked = false;
+            const btn = page.locator('[data-test-id="execute-workflow-button"]');
+            if (await cnt(btn) > 0) { try { await btn.first().click({ timeout: 8000 }); clicked = true; } catch {} }
+            if (!clicked) { try { await page.getByRole('button', { name: /Execute workflow|Test workflow/i }).first().click({ timeout: 8000 }); clicked = true; } catch {} }
+            if (!clicked) { try { await page.locator('[class*="execute"]').filter({ hasText: /Execute|Test/i }).first().click({ timeout: 8000 }); clicked = true; } catch {} }
+            log('execute clicked:', clicked);
+            // Wait for completion: success toast appears, or the stop button vanishes after having appeared.
+            let done = false, sawRunning = false;
+            for (let i = 0; i < 50; i++) {
+              await sleep(3000);
+              const success = await cnt(page.getByText(/executed successfully|Workflow executed/i));
+              const running = await cnt(page.locator('[data-test-id="stop-execution-button"], [data-test-id="stop-execution-waiting-for-webhook-button"]'));
+              if (running > 0) sawRunning = true;
+              if (success > 0) { done = true; log('success toast at iter', i); break; }
+              if (sawRunning && running === 0 && i > 1) { done = true; log('run-button settled at iter', i); break; }
             }
-            log('execId:', execId);
+            log('execution done flag:', done);
           });
-          await phase('show-output', async () => {
-            if (execId) { await page.goto(BASE + '/workflow/' + wfId + '/executions/' + execId, { waitUntil: 'networkidle' }); await sleep(6000); }
-            else {
-              await page.goto(BASE + '/workflow/' + wfId + '/executions', { waitUntil: 'networkidle' }); await sleep(4000);
-              const firstExec = page.locator('[data-test-id="execution-card"], [class*="execution"]').first();
-              if (await cnt(firstExec) > 0) { try { await firstExec.click(); log('clicked first execution'); } catch {} await sleep(5000); }
-            }
-            log('exec view; NexGenData on page:', await cnt(page.getByText(/NexGenData Email Finder/i)));
+          await phase('node-output', async () => {
             await openNodeFn();
-            await sleep(3000);
-            log('output rows (@/email/domain):', await cnt(page.getByText(/@|email|"domain"|companyDomain/i)));
+            await sleep(3500);
+            const ndvOpen = await cnt(page.locator(NDV));
+            const outPanel = await cnt(page.locator('[data-test-id="output-panel"], [data-test-id="ndv-output-panel"]'));
+            const emailHits = await cnt(page.getByText(/@/));
+            const errBadge = await cnt(page.getByText(/ERROR|problem in node|Could not|failed/i));
+            log('NDV open:', ndvOpen, 'output panel:', outPanel, 'email(@) hits:', emailHits, 'error hits:', errBadge);
           });
-          await phase('output', async () => { await sleep(5000); });
+          await phase('output', async () => { await sleep(4000); });
 
           await sleep(2000); await context.close(); await browser.close(); log('done');
           JS
@@ -161,7 +170,9 @@ jobs:
       - name: Record demo
         env:
           APIFY_TOKEN: ${{ secrets.APIFY_TOKEN }}
-        run: node record.mjs
+        run: |
+          set -o pipefail
+          node record.mjs 2>&1 | tee rec-log.txt
 
       - name: Convert to MP4
         if: always()
@@ -201,6 +212,11 @@ jobs:
           cp shots/*.png repo/demo-shots/ 2>/dev/null || true
           cp demo.mp4 repo/demo-shots/ 2>/dev/null || true
           cp demo.webm repo/demo-shots/ 2>/dev/null || true
+          # combined run log (recorder stdout + n8n container logs) at a short raw URL
+          {
+            echo "=== recorder stdout ==="; cat rec-log.txt 2>/dev/null || echo "(no rec-log)";
+            echo; echo "=== n8n container logs (tail 120) ==="; docker logs n8n 2>&1 | tail -120 || true;
+          } > repo/demo-shots/run-log.txt
           cd repo
           git config user.name "ci-bot"
           git config user.email "ci-bot@users.noreply.github.com"
