@@ -1,0 +1,140 @@
+{
+  "name": "NexGenData — Google Shopping Price Monitor → Google Sheets",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "daysInterval": 1,
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "node-schedule",
+      "name": "Schedule Trigger (daily 8am)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/nexgendata~google-shopping-scraper/run-sync-get-dataset-items",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "YOUR_APIFY_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"queries\": [\"warehouse robotics kit\", \"protein meal replacement\"]\n}",
+        "options": {
+          "timeout": 290000
+        }
+      },
+      "id": "node-http",
+      "name": "Run Apify Actor (Google Shopping)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// HTTP Request (v4.x) auto-splits a top-level JSON array into one item per row.\n// Guard handles both cases: pass items through, or flatten if one item holds the array.\nconst items = $input.all();\nif (items.length === 1 && Array.isArray(items[0].json)) {\n  return items[0].json.map(r => ({ json: r }));\n}\nreturn items;"
+      },
+      "id": "node-code",
+      "name": "Normalize rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "url",
+          "value": "YOUR_GOOGLE_SHEET_URL"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "schema": []
+        },
+        "options": {}
+      },
+      "id": "node-sheets",
+      "name": "Append to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        720,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (daily 8am)": {
+      "main": [
+        [
+          {
+            "node": "Run Apify Actor (Google Shopping)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Apify Actor (Google Shopping)": {
+      "main": [
+        [
+          {
+            "node": "Normalize rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize rows": {
+      "main": [
+        [
+          {
+            "node": "Append to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {
+    "instanceId": "nexgendata-template"
+  }
+}

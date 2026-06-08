@@ -1,0 +1,127 @@
+{
+  "name": "NexGenData — SEC Form 4 Insider Monitor → Email",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 12
+            }
+          ]
+        }
+      },
+      "id": "node-schedule",
+      "name": "Schedule Trigger (every 12h)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/nexgendata~sec-form-4-insider-trading-scraper/run-sync-get-dataset-items",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "token",
+              "value": "YOUR_APIFY_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"tickers\": [\"AAPL\", \"NVDA\", \"TSLA\"]\n}",
+        "options": {
+          "timeout": 290000
+        }
+      },
+      "id": "node-http",
+      "name": "Run Apify Actor (SEC Form 4)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Collect all rows (HTTP v4.x auto-splits a top-level array; guard handles a wrapped array too)\nlet rows = $input.all().map(i => i.json);\nif (rows.length === 1 && Array.isArray(rows[0])) rows = rows[0];\nrows = rows.filter(r => r && (r.issuer || r.ticker));\nif (!rows.length) return [];\nconst line = r => `${r.filing_date || r.date || ''} | ${r.issuer || ''} (${r.ticker || ''}) | ${r.reporting_person || ''} ${r.role || ''} | ${r.transaction_code || r.code || ''} | ${r.shares || ''} sh`;\nconst body = 'Public SEC Form 4 filings (information only, not investment advice):\\n\\n' + rows.map(line).join('\\n');\nreturn [{ json: { subject: `SEC Form 4 digest — ${rows.length} new filing(s)`, body } }];"
+      },
+      "id": "node-code",
+      "name": "Build digest",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "YOUR_EMAIL@example.com",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {}
+      },
+      "id": "node-gmail",
+      "name": "Send digest email (Gmail)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        720,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger (every 12h)": {
+      "main": [
+        [
+          {
+            "node": "Run Apify Actor (SEC Form 4)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run Apify Actor (SEC Form 4)": {
+      "main": [
+        [
+          {
+            "node": "Build digest",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build digest": {
+      "main": [
+        [
+          {
+            "node": "Send digest email (Gmail)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "pinData": {},
+  "meta": {
+    "instanceId": "nexgendata-template"
+  }
+}
