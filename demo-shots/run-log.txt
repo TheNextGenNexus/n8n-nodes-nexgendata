@@ -1,0 +1,148 @@
+=== recorder stdout ===
+[rec] PHASE open
+[rec] PHASE owner-setup
+[rec] owner setup status: 200
+[rec] PHASE install
+[rec] install status: 200
+[rec] package registered: true
+[rec] PHASE community-nodes
+[rec] nexgendata on settings page: 16
+[rec] PHASE create-cred
+[rec] cred status: 200
+[rec] credId: 3oszw9hP5oGinY32
+[rec] PHASE create-workflow
+[rec] workflow status: 200
+[rec] wfId: 17KeX6sJAJV0rUmp
+[rec] PHASE open-workflow
+[rec] canvas has node: 3
+[rec] PHASE open-node
+[rec] NDV open: 5 credential: 2 domain: 0
+[rec] PHASE execute
+[rec] execute clicked: true
+[rec] execution done flag: false
+[rec] PHASE node-output
+[rec] NDV open: 5 output panel: 1 email(@) hits: 1 error hits: 7
+[rec] PHASE output
+[rec] done
+
+=== n8n container logs (tail 120) ===
+Finished migration CreateWorkflowPublishedVersionTable1769698710000
+Starting migration ExpandSubjectIDColumnLength1769784356000
+Finished migration ExpandSubjectIDColumnLength1769784356000
+Starting migration AddWorkflowUnpublishScopeToCustomRoles1769900001000
+Finished migration AddWorkflowUnpublishScopeToCustomRoles1769900001000
+Starting migration CreateChatHubToolsTable1770000000000
+Finished migration CreateChatHubToolsTable1770000000000
+Starting migration ExpandProviderIdColumnLength1770000000000
+Finished migration ExpandProviderIdColumnLength1770000000000
+Starting migration CreateWorkflowBuilderSessionTable1770220686000
+Finished migration CreateWorkflowBuilderSessionTable1770220686000
+Starting migration AddScalingFieldsToTestRun1771417407753
+Finished migration AddScalingFieldsToTestRun1771417407753
+Starting migration MigrateExternalSecretsToEntityStorage1771500000000
+[MigrateExternalSecretsToEntityStorage1771500000000] No external secrets settings found, skipping
+Finished migration MigrateExternalSecretsToEntityStorage1771500000000
+Starting migration AddUnshareScopeToCustomRoles1771500000001
+Finished migration AddUnshareScopeToCustomRoles1771500000001
+Starting migration AddFilesColumnToChatHubAgents1771500000002
+Finished migration AddFilesColumnToChatHubAgents1771500000002
+Starting migration AddSuggestedPromptsToAgentTable1772000000000
+Finished migration AddSuggestedPromptsToAgentTable1772000000000
+Starting migration AddRoleColumnToProjectSecretsProviderAccess1772619247761
+Finished migration AddRoleColumnToProjectSecretsProviderAccess1772619247761
+Starting migration ChangeWorkflowPublishedVersionFKsToRestrict1772619247762
+Finished migration ChangeWorkflowPublishedVersionFKsToRestrict1772619247762
+Starting migration AddTypeToChatHubSessions1772700000000
+Finished migration AddTypeToChatHubSessions1772700000000
+Starting migration CreateRoleMappingRuleTable1772800000000
+Finished migration CreateRoleMappingRuleTable1772800000000
+Starting migration CreateCredentialDependencyTable1773000000000
+[CreateCredentialDependencyTable1773000000000] Backfilled credential dependencies for 0 credentials. Inserted 0 dependencies.
+Finished migration CreateCredentialDependencyTable1773000000000
+Starting migration AddRestoreFieldsToWorkflowBuilderSession1774280963551
+Finished migration AddRestoreFieldsToWorkflowBuilderSession1774280963551
+Starting migration CreateInstanceVersionHistoryTable1774854660000
+Finished migration CreateInstanceVersionHistoryTable1774854660000
+Starting migration CreateInstanceAiTables1775000000000
+Finished migration CreateInstanceAiTables1775000000000
+Starting migration CreateTokenExchangeJtiTable1775116241000
+Finished migration CreateTokenExchangeJtiTable1775116241000
+Starting migration ChangeWorkflowPublishHistoryVersionIdToSetNull1775740765000
+Finished migration ChangeWorkflowPublishHistoryVersionIdToSetNull1775740765000
+Starting migration CreateTrustedKeyTables1776000000000
+Finished migration CreateTrustedKeyTables1776000000000
+Starting migration CreateFavoritesTable1776150756000
+Finished migration CreateFavoritesTable1776150756000
+Starting migration CreateDeploymentKeyTable1777000000000
+Finished migration CreateDeploymentKeyTable1777000000000
+Starting migration AddJweKeyIndexesToDeploymentKey1777023444000
+Finished migration AddJweKeyIndexesToDeploymentKey1777023444000
+Starting migration AddTracingContextToExecution1777045000000
+Finished migration AddTracingContextToExecution1777045000000
+Starting migration AddLangsmithIdsToInstanceAiRunSnapshots1777100000000
+Finished migration AddLangsmithIdsToInstanceAiRunSnapshots1777100000000
+Starting migration CreateAiBuilderTemporaryWorkflowTable1777281990043
+Finished migration CreateAiBuilderTemporaryWorkflowTable1777281990043
+Starting migration AddRunIndexToTestCaseExecution1777996709110
+Finished migration AddRunIndexToTestCaseExecution1777996709110
+Starting migration AddExecutionDeduplicationKey1778000000000
+Finished migration AddExecutionDeduplicationKey1778000000000
+Starting migration CreateEvaluationConfig1778100000000
+Finished migration CreateEvaluationConfig1778100000000
+Starting migration AddWorkflowVersionToTestRun1778100001000
+Finished migration AddWorkflowVersionToTestRun1778100001000
+Starting migration AddEvaluationConfigColumnsToTestRun1778100002000
+Finished migration AddEvaluationConfigColumnsToTestRun1778100002000
+Starting migration CreateEvaluationCollection1778496086558
+Finished migration CreateEvaluationCollection1778496086558
+Starting migration CreateAgentTables1783000000000
+Finished migration CreateAgentTables1783000000000
+Starting migration CreateAgentExecutionTables1783000000001
+Finished migration CreateAgentExecutionTables1783000000001
+Starting migration CreateAgentObservationTables1784000000000
+Finished migration CreateAgentObservationTables1784000000000
+Starting migration ReplaceAgentObservationTables1784000000001
+Finished migration ReplaceAgentObservationTables1784000000001
+Starting migration DropAgentExecutionWorkingMemory1784000000002
+Finished migration DropAgentExecutionWorkingMemory1784000000002
+Starting migration LimitWorkflowVersionTriggerToContent1784000000003
+Finished migration LimitWorkflowVersionTriggerToContent1784000000003
+Starting migration AddInsightsRawTimestampIdIndex1784000000004
+Finished migration AddInsightsRawTimestampIdIndex1784000000004
+Starting migration CreateMcpRegistryServerTable1784000000005
+Finished migration CreateMcpRegistryServerTable1784000000005
+Starting migration AddNodeGroupsColumnToWorkflowAndHistory1784000000006
+Finished migration AddNodeGroupsColumnToWorkflowAndHistory1784000000006
+Starting migration CreateInstanceAiCheckpointTable1784000000007
+Finished migration CreateInstanceAiCheckpointTable1784000000007
+Starting migration ResetInstanceAiNativePersistence1784000000008
+Finished migration ResetInstanceAiNativePersistence1784000000008
+Starting migration CreateAgentMemoryEntryTables1784000000009
+Finished migration CreateAgentMemoryEntryTables1784000000009
+Starting migration RefactorAgentObservationScope1784000000010
+Finished migration RefactorAgentObservationScope1784000000010
+Starting migration CreateAgentHistoryTable1784000000011
+Finished migration CreateAgentHistoryTable1784000000011
+Starting migration CreateInstanceAiObservationTables1784000000012
+Finished migration CreateInstanceAiObservationTables1784000000012
+Starting migration SplitRedactionScopeInCustomRoles1784000000013
+Finished migration SplitRedactionScopeInCustomRoles1784000000013
+Starting migration PersistInstanceAiPendingConfirmations1784000000014
+Finished migration PersistInstanceAiPendingConfirmations1784000000014
+Starting migration UseSlugAsPrimaryKeyInMcpRegistryServer1784000000016
+Finished migration UseSlugAsPrimaryKeyInMcpRegistryServer1784000000016
+n8n Task Broker ready on 127.0.0.1, port 5679
+Failed to start Python task runner in internal mode. because Python 3 is missing from this system. Launching a Python runner in internal mode is intended only for debugging and is not recommended for production. Users are encouraged to deploy in external mode. See: https://docs.n8n.io/hosting/configuration/task-runners/#setting-up-external-mode
+[license SDK] Skipping renewal on init: license cert is not initialized
+Registered runner "JS Task Runner" (eqJmHlzDGK9Y_NyrwBuGJ) 
+Instance registered
+Discovered 4 cluster checks
+Recorded version change: (none) -> 2.23.4
+Version: 2.23.4
+Building workflow dependency index...
+Finished building workflow dependency index. Processed 0 draft workflows, 0 published workflows.
+
+Editor is now accessible via:
+http://localhost:5678
+Owner was set up successfully
+Community package installed: n8n-nodes-nexgendata
