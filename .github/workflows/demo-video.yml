@@ -200,13 +200,31 @@ jobs:
             log('cred modal still open:', await cnt(page.getByText(/Apify API Token/i)));
           });
 
-          // ---- DOMAINS: ensure modal is closed, then click the NODE's "Add Domain" and type stripe.com ----
+          // ---- DOMAINS: click "Add Domain" until a row actually appears, then fill the first EMPTY input (the new domain row) ----
           await phase('fill-domain', async () => {
             for (let i = 0; i < 3 && await cnt(page.getByText(/Apify API Token/i)) > 0; i++) { try { await page.keyboard.press('Escape'); } catch {} await sleep(1200); }
-            const addDomain = page.getByRole('button', { name: /add domain/i }).first().or(page.getByText(/^\s*Add Domain\s*$/i).first());
-            if (await cnt(addDomain) > 0) { try { await addDomain.click(); log('clicked Add Domain'); } catch {} await sleep(1800); }
-            const domInput = page.locator('input[type="text"]:visible').last();
-            if (await cnt(domInput) > 0) { try { await domInput.click(); await domInput.fill('stripe.com'); log('filled domain'); } catch {} } else log('no domain input');
+            // add a domain row; retry until "Currently no items exist" is gone
+            let added = false;
+            for (let attempt = 0; attempt < 3 && !added; attempt++) {
+              const addDomain = page.getByText('Add Domain', { exact: true }).first().or(page.getByRole('button', { name: /^add domain$/i }).first());
+              if (await cnt(addDomain) > 0) { try { await addDomain.click(); } catch {} await sleep(2000); }
+              added = (await cnt(page.getByText(/Currently no items exist/i))) === 0;
+            }
+            log('domain row added:', added);
+            // fill the FIRST empty text input (credential + operation already have values; the new domain row is empty and sits above Additional Fields)
+            const inputs = page.locator('input[type="text"]:visible');
+            const n = await cnt(inputs);
+            let filled = false;
+            for (let i = 0; i < n && !filled; i++) {
+              const val = (await inputs.nth(i).inputValue().catch(() => 'x'));
+              if (val && val.trim()) continue;
+              try {
+                await inputs.nth(i).click(); await inputs.nth(i).fill('stripe.com');
+                const v = (await inputs.nth(i).inputValue().catch(() => ''));
+                if (/stripe/i.test(v)) { log('filled domain input #' + i); filled = true; }
+              } catch {}
+            }
+            if (!filled) log('domain not filled');
             await sleep(1800);
           });
           await phase('run', async () => {
