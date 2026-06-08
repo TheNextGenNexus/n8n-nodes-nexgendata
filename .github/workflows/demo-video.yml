@@ -122,29 +122,49 @@ jobs:
             log('canvas has node:', await cnt(page.getByText(/NexGenData Email Finder/i)));
           });
 
-          await phase('open-node', async () => {
+          const openNodeFn = async () => {
             const node = page.locator('[data-test-id="canvas-node"], .vue-flow__node').filter({ hasText: /NexGenData Email Finder/i }).first();
             let opened = false;
-            if (await cnt(node) > 0) {
-              try { const box = await node.boundingBox(); if (box) { await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2); opened = true; log('dblclicked node box'); } } catch (e) { log('box err', e.message.split('\n')[0]); }
-            }
+            if (await cnt(node) > 0) { try { const box = await node.boundingBox(); if (box) { await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2); opened = true; } } catch {} }
             await sleep(2000);
-            if (!opened || (await cnt(page.locator(NDV))) === 0) { try { await page.getByText(/NexGenData Email Finder/i).first().dblclick(); log('fallback dblclick'); } catch {} }
-            await sleep(3500);
+            if (!opened || (await cnt(page.locator(NDV))) === 0) { try { await page.getByText(/NexGenData Email Finder/i).first().dblclick(); } catch {} }
+            await sleep(3000);
+          };
+          await phase('open-node', async () => {
+            await openNodeFn();
             log('NDV open:', await cnt(page.locator(NDV)));
-            log('domains stripe visible:', await cnt(page.getByText(/stripe\.com/i)));
-            log('credential NexGenData API visible:', await cnt(page.getByText(/NexGenData API/i)));
+            log('credential visible:', await cnt(page.getByText(/NexGenData API/i)), 'domains visible:', await cnt(page.getByText(/stripe\.com/i)));
+            try { log('NDV cred/exec testids:', JSON.stringify(await page.locator('[data-test-id]:visible').evaluateAll(e => Array.from(new Set(e.map(x => x.getAttribute('data-test-id')))).filter(t => /cred|execut|test/i.test(t || '')).slice(0, 30)))); } catch {}
+            try { log('NDV buttons:', JSON.stringify((await page.locator('button:visible').allInnerTexts()).filter(Boolean).slice(0, 20))); } catch {}
           });
 
-          await phase('run', async () => {
-            const exec = page.locator('[data-test-id="execute-node-button"]').first().or(page.getByRole('button', { name: /test step|execute step|execute node/i }).first());
-            if (await cnt(exec) > 0) { try { await exec.click(); log('executed node'); } catch {} } else log('no execute button');
-            // the Email Finder calls a real Apify actor; give it time
-            for (let i = 0; i < 9; i++) { await sleep(5000); if (await cnt(page.getByText(/email|@|no data|error|success/i)) > 0) { log('output appeared after ~' + ((i + 1) * 5) + 's'); break; } }
-            log('output panel:', await cnt(page.locator('[data-test-id="ndv-output-panel"], [class*="output"]')));
-            log('output text hits:', await cnt(page.getByText(/email|json|items|error|success|no data/i)));
+          // ---- demonstrate the credential TEST works (n8n requirement #3) ----
+          await phase('cred-test', async () => {
+            const edit = page.locator('[data-test-id="credential-edit-button"], [data-test-id="edit-credential-button"]').first()
+              .or(page.locator('button[aria-label*="edit" i], button[title*="edit" i]').first());
+            if (await cnt(edit) > 0) { try { await edit.click(); log('opened credential editor'); } catch {} } else log('no edit button');
+            await sleep(7000); // n8n auto-runs the connection test on open
+            log('credential test text:', await cnt(page.getByText(/connection tested|tested successfully|connection successful/i)));
           });
-          await phase('output', async () => { await sleep(4000); });
+          await phase('cred-test-close', async () => {
+            const close = page.locator('.el-dialog__close').first().or(page.getByRole('button', { name: /back to canvas|^close$|^done$/i }).first());
+            if (await cnt(close) > 0) { try { await close.click(); } catch {} }
+            for (let i = 0; i < 3 && await cnt(page.getByText(/Apify API Token/i)) > 0; i++) { try { await page.keyboard.press('Escape'); } catch {} await sleep(1000); }
+            await sleep(2000);
+          });
+
+          // ---- execute the node and show output (n8n requirement #4) ----
+          await phase('run', async () => {
+            if ((await cnt(page.locator(NDV))) === 0) { await openNodeFn(); }
+            const exec = page.getByRole('button', { name: /^execute step$/i }).first()
+              .or(page.locator('[data-test-id="node-execute-button"], [data-test-id="execute-node-button"]').first())
+              .or(page.getByText(/^Execute step$/i).first());
+            if (await cnt(exec) > 0) { try { await exec.click(); log('clicked execute step'); } catch {} } else log('no execute button');
+            // the Apify Company Email Finder runs server-side; poll output up to ~120s
+            for (let i = 0; i < 24; i++) { await sleep(5000); const out = await cnt(page.getByText(/@|email|items|json|error|no data/i)); if (out > 0) { log('output after ~' + ((i + 1) * 5) + 's, hits=' + out); break; } }
+            log('output text hits:', await cnt(page.getByText(/@|email|items|json|error|no data/i)));
+          });
+          await phase('output', async () => { await sleep(5000); });
 
           await sleep(2000); await context.close(); await browser.close(); log('done');
           JS
@@ -192,6 +212,8 @@ jobs:
           mkdir -p repo/demo-shots
           cp shots/*.png repo/demo-shots/ 2>/dev/null || true
           cp demo.mp4 repo/demo-shots/ 2>/dev/null || true
+          cp demo.webm repo/demo-shots/ 2>/dev/null || true
+          ls -la demo.mp4 demo.webm 2>/dev/null || true
           cd repo
           git config user.name "ci-bot"
           git config user.email "ci-bot@users.noreply.github.com"
