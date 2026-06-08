@@ -204,13 +204,19 @@ jobs:
           await phase('fill-domain', async () => {
             for (let i = 0; i < 3 && await cnt(page.getByText(/Apify API Token/i)) > 0; i++) { try { await page.keyboard.press('Escape'); } catch {} await sleep(1200); }
             // add a domain row; retry until "Currently no items exist" is gone
-            let added = false;
+            let added = (await cnt(page.getByText(/Currently no items exist/i))) === 0;
             for (let attempt = 0; attempt < 3 && !added; attempt++) {
-              const addDomain = page.getByText('Add Domain', { exact: true }).first().or(page.getByRole('button', { name: /^add domain$/i }).first());
-              if (await cnt(addDomain) > 0) { try { await addDomain.click(); } catch {} await sleep(2000); }
+              const addBtn = page.locator('[data-test-id="fixed-collection-add"]').first()
+                .or(page.getByRole('button', { name: /add domain/i }).first())
+                .or(page.locator('button:has-text("Add Domain"), [class*="button"]:has-text("Add Domain")').first())
+                .or(page.getByText('Add Domain', { exact: true }).first());
+              const c = await cnt(addBtn);
+              log('addBtn count:', c);
+              if (c > 0) { try { await addBtn.scrollIntoViewIfNeeded(); await addBtn.click(); log('clicked add domain #' + attempt); } catch (e) { log('addBtn click err', e.message.split('\n')[0]); } await sleep(2000); }
               added = (await cnt(page.getByText(/Currently no items exist/i))) === 0;
             }
             log('domain row added:', added);
+            if (!added) { try { log('visible buttons:', JSON.stringify((await page.locator('button:visible').allInnerTexts()).filter(Boolean).slice(0, 20))); } catch {} }
             // fill the FIRST empty text input (credential + operation already have values; the new domain row is empty and sits above Additional Fields)
             const inputs = page.locator('input[type="text"]:visible');
             const n = await cnt(inputs);
