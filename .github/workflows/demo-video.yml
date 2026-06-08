@@ -176,33 +176,35 @@ jobs:
             try { log('NDV param labels:', JSON.stringify((await page.locator('.parameter-input-label, [class*="parameter"] label, [class*="paramLabel"], [class*="ParameterInput"] label').allInnerTexts()).filter(Boolean).slice(0, 20))); } catch {}
           });
 
-          // ---- CREDENTIAL: the REST credential doesn't appear here, so create it inline (Create new credential) ----
+          // ---- CREDENTIAL: create inline. Modal has "Apify API Token" (fill) + "Allowed HTTP Request Domains" (DO NOT touch). Save + close. ----
           await phase('cred-create', async () => {
             const credInput = page.locator('input[placeholder*="Credential" i]').first();
             if (await cnt(credInput) > 0) { try { await credInput.click(); log('opened credential dropdown'); } catch {} await sleep(1500); }
             const createNew = page.getByText(/create new credential/i).first();
             if (await cnt(createNew) > 0) { try { await createNew.click(); log('clicked create new credential'); } catch {} } else log('no create-new option');
             await sleep(3500);
-            // fill the Apify token field in the credential modal
-            const tokenField = page.locator('[role="dialog"] input[type="password"]:visible, .el-dialog input[type="password"]:visible, input[type="password"]:visible').first()
-              .or(page.locator('[role="dialog"] input[type="text"]:visible, .el-dialog input[type="text"]:visible').first());
-            if (await cnt(tokenField) > 0) { try { await tokenField.click(); await tokenField.fill(TOKEN); log('filled token'); } catch {} } else log('no token field in modal');
+            // fill the field directly under the "Apify API Token" label (NOT the Allowed-Domains field)
+            let tokenField = page.locator('xpath=(//*[contains(normalize-space(text()),"Apify API Token")]/following::input)[1]').first();
+            if (await cnt(tokenField) === 0) tokenField = page.locator('[data-test-id="credential-edit-dialog"] input').first();
+            if (await cnt(tokenField) > 0) { try { await tokenField.click(); await tokenField.fill(TOKEN); log('filled Apify token'); } catch {} } else log('no token field');
             await sleep(1500);
             const save = page.locator('[data-test-id="credential-save-button"]').first().or(page.getByRole('button', { name: /^save$/i }).first());
             if (await cnt(save) > 0) { try { await save.click(); log('saved credential'); } catch {} }
             await sleep(9000);
-            log('tested ok text:', await cnt(page.getByText(/connection tested|tested successfully|credential.*saved/i)));
-            const back = page.getByRole('button', { name: /back to canvas|^close$|^done$/i }).first()
-              .or(page.locator('.el-dialog__close, [role="dialog"] button[aria-label*="close" i]').first());
-            if (await cnt(back) > 0) { try { await back.click(); log('closed cred modal'); } catch {} }
-            await sleep(2500);
+            log('tested ok text:', await cnt(page.getByText(/connection tested|tested successfully/i)));
+            // close the modal: X button, then Escape as hard fallback, until "Apify API Token" is gone
+            const x = page.locator('.el-dialog__close, [data-test-id="credential-edit-dialog"] [class*="close"]').first()
+              .or(page.getByRole('button', { name: /back to canvas|^close$|^done$/i }).first());
+            if (await cnt(x) > 0) { try { await x.click(); log('clicked close'); } catch {} await sleep(1500); }
+            for (let i = 0; i < 3 && await cnt(page.getByText(/Apify API Token/i)) > 0; i++) { try { await page.keyboard.press('Escape'); } catch {} await sleep(1200); }
+            log('cred modal still open:', await cnt(page.getByText(/Apify API Token/i)));
           });
 
-          // ---- DOMAINS: click "Add Domain" first (collection is empty), then type stripe.com ----
+          // ---- DOMAINS: ensure modal is closed, then click the NODE's "Add Domain" and type stripe.com ----
           await phase('fill-domain', async () => {
+            for (let i = 0; i < 3 && await cnt(page.getByText(/Apify API Token/i)) > 0; i++) { try { await page.keyboard.press('Escape'); } catch {} await sleep(1200); }
             const addDomain = page.getByRole('button', { name: /add domain/i }).first().or(page.getByText(/^\s*Add Domain\s*$/i).first());
             if (await cnt(addDomain) > 0) { try { await addDomain.click(); log('clicked Add Domain'); } catch {} await sleep(1800); }
-            // the newly added domain input is the last visible text input in the form
             const domInput = page.locator('input[type="text"]:visible').last();
             if (await cnt(domInput) > 0) { try { await domInput.click(); await domInput.fill('stripe.com'); log('filled domain'); } catch {} } else log('no domain input');
             await sleep(1800);
