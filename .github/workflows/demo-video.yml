@@ -1,9 +1,9 @@
 name: Demo Video
 
-# Auto-generates the n8n verification demo video on a CI runner.
-# Builds the entire workflow (trigger + node + credential + domains) via n8n's REST
-# API - fully pre-configured, deterministic, no fragile UI field-clicking - then the
-# browser just OPENS the workflow, opens the node, and runs it while recording.
+# Builds the workflow (trigger + node + credential + domains) via n8n REST, then RUNS it
+# via REST (POST /rest/workflows/{id}/run) so the Email Finder makes its real Apify call,
+# then opens the finished execution in the editor so the node's output rows render. No
+# fragile UI clicking for build/config/execute.
 
 on:
   workflow_dispatch:
@@ -66,42 +66,39 @@ jobs:
           page.setDefaultTimeout(25000);
           async function phase(label, fn) { log('PHASE', label); try { await fn(); } catch (e) { log('ERR', label, e.message.split('\n')[0]); } await shot(page, label.replace(/\s+/g,'-')); await sleep(2000); }
           const NDV = '[data-test-id="ndv"], [class*="ndv"]';
-          let credId = '', wfId = '';
+          let credId = '', wfId = '', execId = '', wf = null;
+          const openNodeFn = async () => {
+            const node = page.locator('[data-test-id="canvas-node"], .vue-flow__node').filter({ hasText: /NexGenData Email Finder/i }).first();
+            let opened = false;
+            if (await cnt(node) > 0) { try { const box = await node.boundingBox(); if (box) { await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2); opened = true; } } catch {} }
+            await sleep(2000);
+            if (!opened || (await cnt(page.locator(NDV))) === 0) { try { await page.getByText(/NexGenData Email Finder/i).first().dblclick(); } catch {} }
+            await sleep(3000);
+          };
 
           await phase('open', async () => { await page.goto(BASE, { waitUntil: 'networkidle' }); await sleep(3000); });
-
           await phase('owner-setup', async () => {
             const creds = { email: 'demo@nexgendata.test', firstName: 'Demo', lastName: 'User', password: 'NexGenDemo1' };
             let s = 0;
-            for (const path of ['/rest/owner/setup', '/rest/owner']) {
-              try { const r = await page.request.post(BASE + path, { headers: { 'content-type': 'application/json' }, data: creds }); s = r.status(); if (s >= 200 && s < 300) break; } catch {}
-            }
+            for (const path of ['/rest/owner/setup', '/rest/owner']) { try { const r = await page.request.post(BASE + path, { headers: { 'content-type': 'application/json' }, data: creds }); s = r.status(); if (s >= 200 && s < 300) break; } catch {} }
             log('owner setup status:', s); await sleep(2000);
           });
-
           await phase('install', async () => {
             await page.goto(BASE + '/settings/community-nodes', { waitUntil: 'networkidle' }); await sleep(2500);
-            try { const r = await page.request.post(BASE + '/rest/community-packages', { headers: { 'content-type': 'application/json' }, data: { name: PKG } }); log('install status:', r.status()); } catch (e) { log('install err', e.message.split('\n')[0]); }
+            try { const r = await page.request.post(BASE + '/rest/community-packages', { headers: { 'content-type': 'application/json' }, data: { name: PKG } }); log('install status:', r.status()); } catch {}
             let ok = false;
             for (let i = 0; i < 24; i++) { await sleep(5000); try { const g = await page.request.get(BASE + '/rest/community-packages'); if ((await g.text()).includes(PKG)) { ok = true; break; } } catch {} }
             log('package registered:', ok);
           });
-
-          await phase('community-nodes', async () => {
-            await page.goto(BASE + '/settings/community-nodes', { waitUntil: 'networkidle' }); await sleep(3500);
-            log('nexgendata on settings page:', await cnt(page.getByText(/nexgendata/i)));
-          });
-
-          // ---- Build everything via REST (deterministic, no UI field-guessing) ----
+          await phase('community-nodes', async () => { await page.goto(BASE + '/settings/community-nodes', { waitUntil: 'networkidle' }); await sleep(3500); log('nexgendata on settings page:', await cnt(page.getByText(/nexgendata/i))); });
           await phase('create-cred', async () => {
             let body = '';
-            try { const r = await page.request.post(BASE + '/rest/credentials', { headers: { 'content-type': 'application/json' }, data: { name: 'NexGenData API', type: 'nexGenDataApi', data: { apifyToken: TOKEN } } }); body = await r.text(); log('cred status:', r.status()); } catch (e) { log('cred err', e.message.split('\n')[0]); }
+            try { const r = await page.request.post(BASE + '/rest/credentials', { headers: { 'content-type': 'application/json' }, data: { name: 'NexGenData API', type: 'nexGenDataApi', data: { apifyToken: TOKEN } } }); body = await r.text(); log('cred status:', r.status()); } catch {}
             try { credId = (JSON.parse(body).data || {}).id || ''; } catch {}
             log('credId:', credId);
           });
-
           await phase('create-workflow', async () => {
-            const wf = {
+            wf = {
               name: 'NexGenData Email Finder Demo',
               nodes: [
                 { parameters: {}, id: '11111111-1111-1111-1111-111111111111', name: 'Manual Trigger', type: 'n8n-nodes-base.manualTrigger', typeVersion: 1, position: [380, 300] },
@@ -111,70 +108,39 @@ jobs:
               settings: { executionOrder: 'v1' },
             };
             let body = '';
-            try { const r = await page.request.post(BASE + '/rest/workflows', { headers: { 'content-type': 'application/json' }, data: wf }); body = await r.text(); log('workflow status:', r.status()); } catch (e) { log('wf err', e.message.split('\n')[0]); }
+            try { const r = await page.request.post(BASE + '/rest/workflows', { headers: { 'content-type': 'application/json' }, data: wf }); body = await r.text(); log('workflow status:', r.status()); } catch {}
             try { wfId = (JSON.parse(body).data || {}).id || ''; } catch {}
-            log('wfId:', wfId); log('wf resp head:', body.slice(0, 200));
+            log('wfId:', wfId);
           });
-
           await phase('open-workflow', async () => {
             if (wfId) { await page.goto(BASE + '/workflow/' + wfId, { waitUntil: 'networkidle' }); } else { await page.goto(BASE + '/home/workflows', { waitUntil: 'networkidle' }); }
             await sleep(4500);
             log('canvas has node:', await cnt(page.getByText(/NexGenData Email Finder/i)));
           });
-
-          const openNodeFn = async () => {
-            const node = page.locator('[data-test-id="canvas-node"], .vue-flow__node').filter({ hasText: /NexGenData Email Finder/i }).first();
-            let opened = false;
-            if (await cnt(node) > 0) { try { const box = await node.boundingBox(); if (box) { await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2); opened = true; } } catch {} }
-            await sleep(2000);
-            if (!opened || (await cnt(page.locator(NDV))) === 0) { try { await page.getByText(/NexGenData Email Finder/i).first().dblclick(); } catch {} }
-            await sleep(3000);
-          };
           await phase('open-node', async () => {
             await openNodeFn();
-            log('NDV open:', await cnt(page.locator(NDV)));
-            log('credential visible:', await cnt(page.getByText(/NexGenData API/i)), 'domains visible:', await cnt(page.getByText(/stripe\.com/i)));
-            try { log('NDV cred/exec testids:', JSON.stringify(await page.locator('[data-test-id]:visible').evaluateAll(e => Array.from(new Set(e.map(x => x.getAttribute('data-test-id')))).filter(t => /cred|execut|test/i.test(t || '')).slice(0, 30)))); } catch {}
-            try { log('NDV buttons:', JSON.stringify((await page.locator('button:visible').allInnerTexts()).filter(Boolean).slice(0, 20))); } catch {}
+            log('NDV open:', await cnt(page.locator(NDV)), 'credential:', await cnt(page.getByText(/NexGenData API/i)), 'domain:', await cnt(page.getByText(/stripe\.com/i)));
+            try { await page.keyboard.press('Escape'); } catch {}
+            await sleep(1500);
           });
-
-          // ---- demonstrate the credential TEST works (n8n requirement #3) ----
-          await phase('cred-test', async () => {
-            const edit = page.locator('[data-test-id="credential-edit-button"], [data-test-id="edit-credential-button"]').first()
-              .or(page.locator('button[aria-label*="edit" i], button[title*="edit" i]').first());
-            if (await cnt(edit) > 0) { try { await edit.click(); log('opened credential editor'); } catch {} } else log('no edit button');
-            await sleep(7000); // n8n auto-runs the connection test on open
-            log('credential test text:', await cnt(page.getByText(/connection tested|tested successfully|connection successful/i)));
+          await phase('execute-rest', async () => {
+            let s = 0, body = '';
+            try { const r = await page.request.post(BASE + '/rest/workflows/' + wfId + '/run', { headers: { 'content-type': 'application/json' }, data: { workflowData: wf }, timeout: 180000 }); s = r.status(); body = (await r.text()); } catch (e) { body = 'run threw: ' + e.message.split('\n')[0]; }
+            log('run status:', s);
+            log('run resp head:', body.slice(0, 300));
+            try { const j = JSON.parse(body); execId = (j.data && (j.data.executionId || j.data.id)) || ''; } catch {}
+            if (!execId) { try { const g = await page.request.get(BASE + '/rest/executions?filter=' + encodeURIComponent(JSON.stringify({ workflowId: wfId }))); const jj = JSON.parse(await g.text()); const arr = (jj.data && (jj.data.results || jj.data)) || []; execId = (arr[0] || {}).id || ''; } catch {} }
+            log('execId:', execId);
           });
-          await phase('cred-test-close', async () => {
-            const close = page.locator('.el-dialog__close').first().or(page.getByRole('button', { name: /back to canvas|^close$|^done$/i }).first());
-            if (await cnt(close) > 0) { try { await close.click(); } catch {} }
-            for (let i = 0; i < 3 && await cnt(page.getByText(/Apify API Token/i)) > 0; i++) { try { await page.keyboard.press('Escape'); } catch {} await sleep(1000); }
-            await sleep(2000);
-          });
-
-          // ---- execute the node; a successful run proves BOTH the credential works and the functionality (n8n #3 + #4) ----
-          await phase('run', async () => {
-            if ((await cnt(page.locator(NDV))) === 0) { await openNodeFn(); }
-            const exec = page.getByRole('button', { name: /^execute step$/i }).first()
-              .or(page.locator('[data-test-id="node-execute-button"], [data-test-id="execute-node-button"]').first())
-              .or(page.getByText(/^Execute step$/i).first());
-            if (await cnt(exec) > 0) { try { await exec.click(); log('clicked execute step'); } catch {} }
-            else { const wf = page.getByRole('button', { name: /execute workflow/i }).first(); if (await cnt(wf) > 0) { try { await wf.click(); log('clicked execute workflow'); } catch {} } else log('no execute button'); }
-            // wait for the REAL Apify run. Break only on real output / success / error - NOT the "No output data" placeholder.
-            let got = false;
-            for (let i = 0; i < 30; i++) {
-              await sleep(5000);
-              const real = await cnt(page.getByText(/@|"email"|emails|companyDomain|"domain"|JSON|Table/i));
-              const done = await cnt(page.getByText(/execution.*success|node executed|successful|tested successfully/i));
-              const err = await cnt(page.getByText(/problem in node|error in|node failed|forbidden|unauthor|ERROR/i));
-              if (real > 0 || done > 0 || err > 0) { got = true; log('output state ~' + ((i + 1) * 5) + 's: real=' + real + ' done=' + done + ' err=' + err); break; }
-            }
-            if (!got) log('no real output after ~150s');
+          await phase('show-output', async () => {
+            if (execId) { await page.goto(BASE + '/workflow/' + wfId + '/executions/' + execId, { waitUntil: 'networkidle' }); await sleep(5000); }
+            else { await page.goto(BASE + '/workflow/' + wfId + '/executions', { waitUntil: 'networkidle' }); await sleep(4000); }
+            log('exec view loaded; NexGenData on page:', await cnt(page.getByText(/NexGenData Email Finder/i)));
+            await openNodeFn();
             await sleep(3000);
-            log('final output hits:', await cnt(page.getByText(/@|email|json|items/i)));
+            log('output rows (@/email/domain):', await cnt(page.getByText(/@|email|"domain"|companyDomain/i)));
           });
-          await phase('output', async () => { await sleep(6000); });
+          await phase('output', async () => { await sleep(5000); });
 
           await sleep(2000); await context.close(); await browser.close(); log('done');
           JS
@@ -210,7 +176,7 @@ jobs:
             shots/**
           if-no-files-found: warn
 
-      - name: Publish screenshots to repo (so they can be reviewed in-browser)
+      - name: Publish screenshots + video to repo
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -223,7 +189,6 @@ jobs:
           cp shots/*.png repo/demo-shots/ 2>/dev/null || true
           cp demo.mp4 repo/demo-shots/ 2>/dev/null || true
           cp demo.webm repo/demo-shots/ 2>/dev/null || true
-          ls -la demo.mp4 demo.webm 2>/dev/null || true
           cd repo
           git config user.name "ci-bot"
           git config user.email "ci-bot@users.noreply.github.com"
