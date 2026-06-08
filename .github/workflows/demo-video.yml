@@ -12,6 +12,8 @@ on:
 jobs:
   record:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/setup-node@v4
         with:
@@ -247,3 +249,22 @@ jobs:
             video/**
             shots/**
           if-no-files-found: warn
+
+      - name: Publish screenshots to repo (so they can be reviewed in-browser)
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          ls -la shots || { echo "no shots"; exit 0; }
+          git clone --depth 1 "https://x-access-token:${GH_TOKEN}@github.com/TheNextGenNexus/n8n-nodes-nexgendata.git" repo
+          rm -rf repo/demo-shots
+          mkdir -p repo/demo-shots
+          cp shots/*.png repo/demo-shots/ 2>/dev/null || true
+          cp demo.mp4 repo/demo-shots/ 2>/dev/null || true
+          cd repo
+          git config user.name "ci-bot"
+          git config user.email "ci-bot@users.noreply.github.com"
+          git add demo-shots
+          git commit -m "demo screenshots run ${{ github.run_number }} [skip ci]" || echo "nothing to commit"
+          git push origin HEAD:main || echo "push failed"
