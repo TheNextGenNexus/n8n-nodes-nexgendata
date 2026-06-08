@@ -174,43 +174,36 @@ jobs:
             try { log('NDV param labels:', JSON.stringify((await page.locator('.parameter-input-label, [class*="parameter"] label, [class*="paramLabel"], [class*="ParameterInput"] label').allInnerTexts()).filter(Boolean).slice(0, 20))); } catch {}
           });
 
-          // ---- CREDENTIAL: attach "NexGenData API" in the Email Finder NDV ----
+          // ---- CREDENTIAL: the picker is an input with placeholder "Select Credential" (confirmed via diagnostic) ----
           await phase('cred-select', async () => {
-            const combos = page.locator('[data-test-id="node-credentials-select"], [data-test-id="credentials-select"], [role="combobox"]');
-            const total = await cnt(combos);
-            log('combobox count:', total);
-            let done = false;
-            for (let i = 0; i < total && !done; i++) {
-              try { await combos.nth(i).click({ force: true }); } catch {}
-              await sleep(1500);
-              const opt = page.getByRole('option', { name: /NexGenData API/i }).first()
-                .or(page.getByText(/^NexGenData API$/i).first());
-              if (await cnt(opt) > 0) { try { await opt.click(); log('selected NexGenData API via combobox ' + i); done = true; } catch {} }
-              else { try { await page.keyboard.press('Escape'); } catch {} await sleep(700); }
-            }
-            if (!done) log('NexGenData API not found in any combobox');
+            const credInput = page.locator('input[placeholder="Select Credential" i], input[placeholder*="Credential" i]').first()
+              .or(page.locator('[data-test-id="node-credentials-select"]').first());
+            if (await cnt(credInput) > 0) { try { await credInput.click({ force: true }); log('opened credential dropdown'); } catch {} await sleep(1800); }
+            const opt = page.getByText(/^NexGenData API$/i).first()
+              .or(page.getByRole('option', { name: /NexGenData API/i }).first());
+            if (await cnt(opt) > 0) { try { await opt.click(); log('selected NexGenData API'); } catch {} }
+            else log('NexGenData API option not shown');
             await sleep(2000);
             log('credential connected text:', await cnt(page.getByText(/NexGenData API/i)));
           });
 
-          // ---- FILL the Email Finder's domain field (stripe.com), then execute ----
+          // ---- FILL the "Domains" parameter with stripe.com (confirmed param label via diagnostic) ----
           await phase('fill-domain', async () => {
             let filled = false;
-            // prefer a text input whose surrounding label mentions "domain"
-            const byLabel = page.locator('div', { has: page.getByText(/domain/i) }).locator('input[type="text"]:visible').first();
-            if (await cnt(byLabel) > 0) { try { await byLabel.click(); await byLabel.fill('stripe.com'); log('filled domain (by label)'); filled = true; } catch {} }
+            const domParam = page.locator('[class*="parameter-input"], [class*="parameter-item"], [class*="parameter"]').filter({ hasText: /Domains/i }).first();
+            if (await cnt(domParam) > 0) {
+              const tgt = domParam.locator('input[type="text"]:visible, textarea:visible, [contenteditable="true"]:visible').first();
+              if (await cnt(tgt) > 0) { try { await tgt.click(); await sleep(400); await page.keyboard.type('stripe.com', { delay: 45 }); log('typed into Domains'); filled = true; } catch {} }
+            }
             if (!filled) {
-              const inputs = page.locator('[class*="parameter"] input[type="text"]:visible, [data-test-id="parameter-input-field"] input:visible');
-              const n2 = await cnt(inputs);
-              for (let i = 0; i < n2 && !filled; i++) {
-                try { const ph = await inputs.nth(i).getAttribute('placeholder'); await inputs.nth(i).click(); await inputs.nth(i).fill('stripe.com'); log('filled param ' + i + ' (ph=' + ph + ')'); filled = true; } catch {}
-              }
+              const ta = page.locator('textarea:visible, [contenteditable="true"]:visible').first();
+              if (await cnt(ta) > 0) { try { await ta.click(); await page.keyboard.type('stripe.com', { delay: 45 }); log('typed into textarea'); filled = true; } catch {} }
             }
             if (!filled) log('no domain field');
             await sleep(1800);
           });
           await phase('run', async () => {
-            const exec = page.locator('[data-test-id="node-execute-button"]').first().or(page.getByRole('button', { name: /test step|execute step|execute node/i }).first());
+            const exec = page.locator('[data-test-id="execute-node-button"]').first().or(page.getByRole('button', { name: /test step|execute step|execute node/i }).first());
             if (await cnt(exec) > 0) { try { await exec.click(); log('executed'); } catch {} } else log('no execute button');
             await sleep(18000);
             log('output panel:', await cnt(page.locator('[data-test-id="ndv-output-panel"], [class*="output"]')));
