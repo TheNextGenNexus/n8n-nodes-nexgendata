@@ -1,7 +1,7 @@
 # n8n-nodes-nexgendata
 
 This is an [n8n](https://n8n.io/) community node package that wraps the
-[NexGenData](https://apify.com/nexgendata) fleet of [Apify](https://apify.com/) actors as
+[NexGenData](https://apify.com/nexgendata?fpr=2ayu9b) fleet of [Apify](https://apify.com/) actors as
 first-class n8n nodes. Install once, get all the nodes — drop them into a
 workflow and run web-scale lead generation and data enrichment without
 writing HTTP boilerplate.
